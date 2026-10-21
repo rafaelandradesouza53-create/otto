@@ -1,0 +1,1672 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#F7F5F0" />
+  <title>OTTO. — Gerador Editorial, Correção por Foto & Cofre de Provas</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,400&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-paper: #F7F5F0;
+      --bg-surface: #FFFFFF;
+      --bg-subtle: #EFECE6;
+      --bg-ink: #121212;
+      --text-ink: #121212;
+      --text-secondary: #4A4843;
+      --text-muted: #78756E;
+      --border-ink: #141414;
+      --border-subtle: #D8D3C8;
+      --accent-emerald: #059669;
+      --accent-emerald-soft: #ECFDF5;
+      --accent-cobalt: #2563EB;
+      --accent-cobalt-soft: #EFF6FF;
+      --accent-amber: #D97706;
+      --accent-amber-soft: #FFFBEB;
+      --accent-crimson: #DC2626;
+      --accent-crimson-soft: #FEF2F2;
+      --shadow-tactile: 2px 2px 0px #141414;
+      --shadow-tactile-lg: 4px 4px 0px #141414;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --transition-fast: 110ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100dvh;
+      overflow: hidden;
+      background-color: var(--bg-paper);
+      color: var(--text-ink);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 14px;
+      line-height: 1.45;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ==============================
+       TOP BAR — ECONOMIA DE CLIQUES
+       ============================== */
+    .app-shell {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 100dvh;
+      overflow: hidden;
+    }
+
+    .topbar {
+      height: 64px;
+      background: var(--bg-surface);
+      border-bottom: 2px solid var(--border-ink);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      gap: 14px;
+      flex-shrink: 0;
+      z-index: 30;
+    }
+
+    .brand-cluster {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      min-width: 0;
+    }
+
+    .otto-badge {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      border: 2px solid var(--border-ink);
+      background: #FFFFFF;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      box-shadow: var(--shadow-tactile);
+      flex-shrink: 0;
+      cursor: pointer;
+      transition: transform var(--transition-fast);
+    }
+
+    .otto-badge:hover {
+      transform: translate(-1px, -1px);
+    }
+
+    .otto-badge img {
+      width: 92%;
+      height: 92%;
+      object-fit: contain;
+      mix-blend-mode: multiply;
+    }
+
+    .brand-title-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      min-width: 0;
+    }
+
+    .brand-wordmark-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-wordmark-img {
+      height: 22px;
+      width: auto;
+      object-fit: contain;
+      mix-blend-mode: multiply;
+    }
+
+    .brand-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      background: var(--bg-ink);
+      color: #FFFFFF;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .otto-voice-line {
+      font-size: 11.5px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 340px;
+    }
+
+    .otto-voice-line strong {
+      color: var(--text-ink);
+      font-weight: 700;
+    }
+
+    /* NAVEGAÇÃO PRINCIPAL EM 3 BOTÕES DIRETOS (ZERO BIFURCAÇÃO) */
+    .mode-switcher {
+      display: flex;
+      align-items: center;
+      background: var(--bg-paper);
+      padding: 4px;
+      border-radius: var(--radius-md);
+      border: 1.5px solid var(--border-ink);
+      gap: 4px;
+    }
+
+    .mode-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 8px 14px;
+      border-radius: 7px;
+      border: 1.5px solid transparent;
+      background: transparent;
+      color: var(--text-secondary);
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all var(--transition-fast);
+      white-space: nowrap;
+    }
+
+    .mode-btn:hover {
+      color: var(--text-ink);
+      background: rgba(18, 18, 18, 0.05);
+    }
+
+    .mode-btn.active {
+      background: var(--bg-ink);
+      color: #FFFFFF;
+      border-color: var(--border-ink);
+      box-shadow: 1px 1px 0px rgba(0,0,0,0.2);
+    }
+
+    .mode-step-num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: rgba(255,255,255,0.16);
+      color: inherit;
+    }
+
+    .mode-btn:not(.active) .mode-step-num {
+      background: var(--bg-subtle);
+      color: var(--text-ink);
+    }
+
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ==============================
+       SISTEMA DE BOTÕES TÁTEIS E DIRETOS
+       ============================== */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 8px 13px;
+      border-radius: var(--radius-sm);
+      border: 1.5px solid var(--border-ink);
+      background: var(--bg-surface);
+      color: var(--text-ink);
+      font-family: inherit;
+      font-size: 12.5px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: var(--shadow-tactile);
+      transition: transform 80ms ease, box-shadow 80ms ease, background-color 80ms ease;
+      white-space: nowrap;
+      user-select: none;
+    }
+
+    .btn:hover {
+      background: var(--bg-subtle);
+      transform: translate(-1px, -1px);
+      box-shadow: 3px 3px 0px #141414;
+    }
+
+    .btn:active {
+      transform: translate(1px, 1px);
+      box-shadow: 0px 0px 0px #141414;
+    }
+
+    .btn-primary {
+      background: var(--bg-ink);
+      color: #FFFFFF;
+    }
+
+    .btn-primary:hover {
+      background: #262626;
+    }
+
+    .btn-emerald {
+      background: var(--accent-emerald);
+      color: #FFFFFF;
+    }
+
+    .btn-emerald:hover {
+      background: #047857;
+    }
+
+    .btn-cobalt {
+      background: var(--accent-cobalt);
+      color: #FFFFFF;
+    }
+
+    .btn-cobalt:hover {
+      background: #1D4ED8;
+    }
+
+    .btn-sm {
+      padding: 5px 9px;
+      font-size: 11.5px;
+      box-shadow: 1.5px 1.5px 0px #141414;
+    }
+
+    /* PÍLULAS DE SELEÇÃO EM 1 CLIQUE */
+    .pill-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      border: 1.5px solid var(--border-subtle);
+      background: var(--bg-surface);
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all var(--transition-fast);
+      user-select: none;
+    }
+
+    .pill:hover {
+      border-color: var(--border-ink);
+      color: var(--text-ink);
+    }
+
+    .pill.active {
+      background: var(--bg-ink);
+      color: #FFFFFF;
+      border-color: var(--border-ink);
+      box-shadow: 1.5px 1.5px 0px rgba(20, 20, 20, 0.25);
+    }
+
+    .pill.active-emerald {
+      background: var(--accent-emerald-soft);
+      color: #065F46;
+      border-color: var(--accent-emerald);
+      font-weight: 700;
+    }
+
+    .pill.active-cobalt {
+      background: var(--accent-cobalt-soft);
+      color: #1E40AF;
+      border-color: var(--accent-cobalt);
+      font-weight: 700;
+    }
+
+    /* ==============================
+       LAYOUT DE PAINÉIS (SPLIT-VIEW)
+       ============================== */
+    .workspace {
+      flex: 1;
+      display: none;
+      width: 100%;
+      height: calc(100dvh - 64px);
+      overflow: hidden;
+    }
+
+    .workspace.active {
+      display: grid;
+    }
+
+    #view-generator {
+      grid-template-columns: 430px 1fr;
+    }
+
+    #view-grader {
+      grid-template-columns: 440px 1fr;
+    }
+
+    #view-vault {
+      grid-template-columns: 1fr 480px;
+    }
+
+    .pane-left, .pane-right {
+      height: 100%;
+      overflow-y: auto;
+      padding: 18px;
+    }
+
+    .pane-left {
+      border-right: 2px solid var(--border-ink);
+      background: var(--bg-paper);
+    }
+
+    .pane-right {
+      background: #EAE6DF;
+    }
+
+    /* CARDS DE CONTROLE */
+    .panel-card {
+      background: var(--bg-surface);
+      border: 1.5px solid var(--border-ink);
+      border-radius: var(--radius-md);
+      padding: 14px;
+      margin-bottom: 14px;
+      box-shadow: var(--shadow-tactile);
+    }
+
+    .panel-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      gap: 8px;
+    }
+
+    .panel-card-title {
+      font-size: 12.5px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .step-badge {
+      width: 20px;
+      height: 20px;
+      border-radius: 5px;
+      background: var(--bg-ink);
+      color: #FFFFFF;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 11.5px;
+      font-weight: 700;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+
+    .input-field, .textarea-field, .select-field {
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: var(--radius-sm);
+      border: 1.5px solid var(--border-subtle);
+      background: var(--bg-surface);
+      color: var(--text-ink);
+      font-family: inherit;
+      font-size: 13px;
+      transition: border-color var(--transition-fast);
+    }
+
+    .input-field:focus, .textarea-field:focus, .select-field:focus {
+      outline: none;
+      border-color: var(--border-ink);
+      box-shadow: 2px 2px 0px rgba(20, 20, 20, 0.12);
+    }
+
+    .textarea-field {
+      resize: vertical;
+      min-height: 92px;
+      line-height: 1.45;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    /* ==============================
+       FOLHA DE PROVA A4 VIVA (DIAGRAMAÇÃO)
+       ============================== */
+    .a4-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      background: var(--bg-surface);
+      border: 1.5px solid var(--border-ink);
+      border-radius: var(--radius-md);
+      padding: 10px 14px;
+      margin-bottom: 16px;
+      box-shadow: var(--shadow-tactile);
+      position: sticky;
+      top: 0;
+      z-index: 15;
+    }
+
+    .a4-stage {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding-bottom: 40px;
+    }
+
+    .a4-sheet {
+      width: 100%;
+      max-width: 794px; /* Largura proporcional A4 */
+      min-height: 1080px;
+      background: #FFFFFF;
+      color: #111111;
+      border: 2px solid #141414;
+      box-shadow: 6px 6px 0px rgba(20, 20, 20, 0.22);
+      padding: 34px 40px;
+      position: relative;
+      transition: all 160ms ease;
+    }
+
+    /* Topo e Rodapé Nanquim característicos do OTTO */
+    .a4-ink-rule-top {
+      border-top: 3px solid #121212;
+      margin-bottom: 10px;
+    }
+
+    .a4-header-box {
+      border: 2px solid #121212;
+      padding: 12px 16px;
+      display: grid;
+      grid-template-columns: 74px 1fr 150px;
+      gap: 14px;
+      align-items: center;
+      margin-bottom: 12px;
+      background: #FFFFFF;
+    }
+
+    .a4-mascot-seal {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border-right: 1.5px solid #121212;
+      padding-right: 10px;
+      text-align: center;
+    }
+
+    .a4-mascot-seal img {
+      width: 50px;
+      height: 50px;
+      object-fit: contain;
+      mix-blend-mode: multiply;
+    }
+
+    .a4-mascot-seal span {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 800;
+      font-size: 10px;
+      letter-spacing: 0.05em;
+      margin-top: 2px;
+    }
+
+    .a4-inst-info h2 {
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      margin-bottom: 2px;
+    }
+
+    .a4-inst-info h1 {
+      font-family: 'Newsreader', Georgia, serif;
+      font-size: 19px;
+      font-weight: 700;
+      line-height: 1.15;
+      margin-bottom: 4px;
+    }
+
+    .a4-inst-meta {
+      font-size: 11px;
+      color: #333333;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .a4-version-stamp {
+      border: 1.5px solid #121212;
+      padding: 6px 8px;
+      text-align: center;
+      background: #F7F5F0;
+    }
+
+    .a4-version-stamp .ver-name {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      font-weight: 800;
+      display: block;
+    }
+
+    .a4-version-stamp .ver-sub {
+      font-size: 9.5px;
+      color: #444;
+      display: block;
+      margin-top: 2px;
+    }
+
+    .a4-student-strip {
+      border: 1.5px solid #121212;
+      padding: 7px 12px;
+      font-size: 11.5px;
+      font-weight: 600;
+      display: grid;
+      grid-template-columns: 1fr 160px 100px;
+      gap: 10px;
+      margin-bottom: 12px;
+      background: #FAFAFA;
+    }
+
+    /* Grade OMR Compacta no topo da prova */
+    .a4-omr-banner {
+      border: 1.5px solid #121212;
+      background: #F9F8F5;
+      padding: 8px 12px;
+      margin-bottom: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .a4-omr-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 14px;
+      align-items: center;
+    }
+
+    .omr-q-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10.5px;
+      font-weight: 700;
+    }
+
+    .omr-bubble {
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      border: 1.3px solid #121212;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 8.5px;
+      font-weight: 700;
+      background: #FFFFFF;
+    }
+
+    /* 3 ESTILOS DE DIAGRAMAÇÃO DE PROVA À ESCOLHA */
+    .a4-questions-body {
+      display: block;
+    }
+
+    /* Estilo 1: Clássico Universitário */
+    .a4-sheet.style-classico .a4-questions-body {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    /* Estilo 2: Residência / Concurso (2 Colunas Compactas) */
+    .a4-sheet.style-duas_colunas .a4-questions-body {
+      column-count: 2;
+      column-gap: 24px;
+      column-rule: 1px solid #121212;
+      font-size: 12.2px;
+    }
+
+    .a4-sheet.style-duas_colunas .exam-q-item {
+      break-inside: avoid;
+      margin-bottom: 14px;
+    }
+
+    /* Estilo 3: Clínico Hospitalar / OSCE */
+    .a4-sheet.style-clinico .exam-q-item {
+      border: 1.5px solid #121212;
+      border-radius: 6px;
+      padding: 12px 14px;
+      margin-bottom: 14px;
+      background: #FCFBF9;
+    }
+
+    .exam-q-item {
+      position: relative;
+    }
+
+    .exam-q-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1.2px solid #121212;
+      padding-bottom: 4px;
+      margin-bottom: 7px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .exam-q-stem {
+      font-family: 'Newsreader', Georgia, serif;
+      font-size: 14.5px;
+      line-height: 1.48;
+      margin-bottom: 9px;
+      color: #111111;
+      text-align: justify;
+    }
+
+    .a4-sheet.style-duas_colunas .exam-q-stem {
+      font-size: 13px;
+      line-height: 1.38;
+    }
+
+    .exam-q-options {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      padding-left: 4px;
+    }
+
+    .exam-opt-line {
+      display: flex;
+      align-items: flex-start;
+      gap: 7px;
+      font-size: 12.8px;
+      line-height: 1.38;
+    }
+
+    .exam-opt-letter {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      min-width: 22px;
+    }
+
+    .exam-essay-lines {
+      margin-top: 8px;
+      border: 1px solid #999;
+      padding: 6px 10px;
+      background: #FFFFFF;
+    }
+
+    .exam-essay-line {
+      height: 22px;
+      border-bottom: 1px dashed #CCCCCC;
+    }
+
+    .exam-essay-line:last-child {
+      border-bottom: none;
+    }
+
+    .teacher-key-box {
+      margin-top: 8px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      background: var(--accent-emerald-soft);
+      border: 1px solid var(--accent-emerald);
+      font-size: 11.5px;
+      color: #064E3B;
+    }
+
+    .q-inline-actions {
+      display: inline-flex;
+      gap: 4px;
+    }
+
+    .q-inline-btn {
+      border: 1px solid #121212;
+      background: #FFFFFF;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .q-inline-btn:hover {
+      background: #121212;
+      color: #FFFFFF;
+    }
+
+    /* ==============================
+       MODO 2: CORREÇÃO POR FOTO DA PROVA
+       ============================== */
+    .photo-scanner-frame {
+      border: 2px solid var(--border-ink);
+      border-radius: var(--radius-md);
+      background: #181818;
+      color: #FFFFFF;
+      overflow: hidden;
+      position: relative;
+      min-height: 290px;
+      display: flex;
+       flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .scanner-canvas-wrap {
+      position: relative;
+      width: 100%;
+      min-height: 260px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #111111;
+      overflow: hidden;
+    }
+
+    .scanner-canvas-wrap img {
+      max-width: 100%;
+      max-height: 360px;
+      object-fit: contain;
+      display: block;
+    }
+
+    .scan-laser {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, transparent, #10B981, #34D399, #10B981, transparent);
+      box-shadow: 0 0 12px #10B981;
+      top: 15%;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .scan-laser.scanning {
+      opacity: 1;
+      animation: laserSweep 1.3s ease-in-out infinite alternate;
+    }
+
+    @keyframes laserSweep {
+      0% { top: 8%; }
+      100% { top: 88%; }
+    }
+
+    /* Grade interativa de correção de Múltipla Escolha */
+    .omr-correction-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+      gap: 10px;
+    }
+
+    .omr-card {
+      border: 1.5px solid var(--border-ink);
+      border-radius: var(--radius-sm);
+      padding: 9px 11px;
+      background: var(--bg-surface);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .omr-card.correct {
+      border-left: 5px solid var(--accent-emerald);
+      background: #F8FEFC;
+    }
+
+    .omr-card.wrong {
+      border-left: 5px solid var(--accent-crimson);
+      background: #FFF9F9;
+    }
+
+    .omr-bubbles-interactive {
+      display: flex;
+      gap: 4px;
+    }
+
+    .omr-btn-bubble {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 1.5px solid var(--border-ink);
+      background: #FFFFFF;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .omr-btn-bubble.marked-correct {
+      background: var(--accent-emerald);
+      color: #FFFFFF;
+      border-color: #065F46;
+    }
+
+    .omr-btn-bubble.marked-wrong {
+      background: var(--accent-crimson);
+      color: #FFFFFF;
+      border-color: #991B1B;
+    }
+
+    .omr-btn-bubble.expected-key {
+      outline: 2px dashed var(--accent-emerald);
+      outline-offset: 2px;
+    }
+
+    /* Cartão de Correção Dissertativa por Conceito & Palavras-Chave */
+    .essay-grade-card {
+      border: 1.5px solid var(--border-ink);
+      border-radius: var(--radius-md);
+      background: var(--bg-surface);
+      padding: 14px;
+      margin-bottom: 14px;
+      box-shadow: var(--shadow-tactile);
+    }
+
+    .kw-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 11.5px;
+      font-weight: 700;
+      margin: 2px;
+    }
+
+    .kw-chip.found {
+      background: var(--accent-emerald-soft);
+      color: #065F46;
+      border: 1px solid var(--accent-emerald);
+    }
+
+    .kw-chip.synonym {
+      background: var(--accent-amber-soft);
+      color: #92400E;
+      border: 1px solid var(--accent-amber);
+    }
+
+    .kw-chip.missing {
+      background: var(--accent-crimson-soft);
+      color: #991B1B;
+      border: 1px dashed var(--accent-crimson);
+    }
+
+    .kw-highlight {
+      background: #A7F3D0;
+      color: #064E3B;
+      padding: 0 3px;
+      border-radius: 3px;
+      font-weight: 700;
+    }
+
+    /* ==============================
+       MODO 3: BACKUP & LIVE PREVIEW EM TEMPO REAL
+       ============================== */
+    .search-live-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--bg-surface);
+      border: 2px solid var(--border-ink);
+      border-radius: var(--radius-md);
+      padding: 10px 14px;
+      box-shadow: var(--shadow-tactile);
+      margin-bottom: 12px;
+    }
+
+    .search-live-bar input {
+      border: none;
+      outline: none;
+      width: 100%;
+      font-size: 15px;
+      font-weight: 600;
+      background: transparent;
+      color: var(--text-ink);
+    }
+
+    .vault-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(235px, 1fr));
+      gap: 12px;
+    }
+
+    .vault-card {
+      background: var(--bg-surface);
+      border: 1.5px solid var(--border-ink);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      cursor: pointer;
+      transition: all var(--transition-fast);
+      display: flex;
+      flex-direction: column;
+      box-shadow: var(--shadow-tactile);
+    }
+
+    .vault-card:hover {
+      transform: translate(-1px, -1px);
+      box-shadow: var(--shadow-tactile-lg);
+    }
+
+    .vault-card.selected {
+      border: 2.5px solid var(--accent-cobalt);
+      box-shadow: 4px 4px 0px var(--accent-cobalt);
+    }
+
+    .vault-thumb {
+      height: 132px;
+      background: #EFECE6;
+      border-bottom: 1.5px solid var(--border-ink);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .vault-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .vault-cat-badge {
+      position: absolute;
+      top: 7px;
+      left: 7px;
+      background: rgba(18, 18, 18, 0.88);
+      color: #FFFFFF;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 4px;
+    }
+
+    .vault-score-badge {
+      position: absolute;
+      bottom: 7px;
+      right: 7px;
+      background: var(--accent-emerald);
+      color: #FFFFFF;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 2px 7px;
+      border-radius: 4px;
+      border: 1px solid #121212;
+    }
+
+    .vault-body {
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .vault-title {
+      font-weight: 800;
+      font-size: 13px;
+      line-height: 1.3;
+    }
+
+    .vault-meta-row {
+      font-size: 11.5px;
+      color: var(--text-secondary);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .search-match-hl {
+      background: #FDE047;
+      color: #111111;
+      padding: 0 2px;
+      border-radius: 2px;
+      font-weight: 800;
+    }
+
+    /* Painel Direito de Pré-Visualização Instantânea (Live Preview) */
+    .live-preview-inspector {
+      background: var(--bg-surface);
+      border: 2px solid var(--border-ink);
+      border-radius: var(--radius-lg);
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: var(--shadow-tactile-lg);
+    }
+
+    .live-preview-header {
+      padding: 12px 16px;
+      background: var(--bg-ink);
+      color: #FFFFFF;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .live-preview-stage {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+    }
+
+    .live-preview-image-box {
+      width: 100%;
+      min-height: 240px;
+      max-height: 330px;
+      background: #F7F5F0;
+      border: 1.5px solid var(--border-ink);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 14px;
+    }
+
+    .live-preview-image-box img {
+      width: 100%;
+      height: 100%;
+      max-height: 325px;
+      object-fit: contain;
+    }
+
+    /* TOAST DE FEEDBACK RÁPIDO DO OTTO */
+    .otto-toast {
+      position: fixed;
+      bottom: 18px;
+      right: 18px;
+      background: var(--bg-ink);
+      color: #FFFFFF;
+      border: 2px solid #FFFFFF;
+      box-shadow: 4px 4px 0px rgba(0,0,0,0.35);
+      border-radius: var(--radius-md);
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      z-index: 100;
+      transform: translateY(130%);
+      transition: transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+      max-width: 390px;
+    }
+
+    .otto-toast.show {
+      transform: translateY(0);
+    }
+
+    .otto-toast img {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: #FFFFFF;
+      padding: 2px;
+      object-fit: contain;
+    }
+
+    /* RESPONSIVIDADE TABLET / MOBILE */
+    @media (max-width: 980px) {
+      html, body, .app-shell, .workspace {
+        height: auto;
+        overflow: visible;
+      }
+      .topbar {
+        height: auto;
+        padding: 10px 14px;
+        flex-wrap: wrap;
+      }
+      #view-generator, #view-grader, #view-vault {
+        grid-template-columns: 1fr;
+      }
+      .pane-left {
+        border-right: none;
+        border-bottom: 2px solid var(--border-ink);
+      }
+    }
+
+    /* ==============================
+       MODO IMPRESSÃO / EXPORTAÇÃO PDF VETORIAL A4
+       ============================== */
+    @media print {
+      @page {
+        size: A4 portrait;
+        margin: 10mm;
+      }
+      html, body, .app-shell, .workspace, .pane-right, .a4-stage {
+        background: #FFFFFF !important;
+        height: auto !important;
+        overflow: visible !important;
+        width: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        display: block !important;
+      }
+      .topbar, .pane-left, .a4-toolbar, .q-inline-actions, .otto-toast, #view-grader, #view-vault {
+        display: none !important;
+      }
+      #view-generator {
+        display: block !important;
+      }
+      .a4-sheet {
+        border: none !important;
+        box-shadow: none !important;
+        max-width: 100% !important;
+        width: 100% !important;
+        padding: 0 !important;
+        min-height: 0 !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <!-- TOP BAR -->
+    <header class="topbar">
+      <div class="brand-cluster">
+        <div class="otto-badge" onclick="ottoNudge()" title="Professor Otto — Clique para dica rápida">
+          <img id="otto-header-avatar" src="assets/otto-avatar.png" alt="Mascote Otto" />
+        </div>
+        <div class="brand-title-wrap">
+          <div class="brand-wordmark-row">
+            <img id="otto-header-wordmark" class="brand-wordmark-img" src="assets/otto-wordmark.png" alt="OTTO." />
+            <span class="brand-tag">PROVA &amp; CORREÇÃO</span>
+          </div>
+          <div class="otto-voice-line" id="otto-voice-status">
+            <strong>Otto:</strong> "Escolha a diretriz, diagrame em 1 clique ou fotografe a prova do aluno."
+          </div>
+        </div>
+      </div>
+
+      <!-- NAVEGAÇÃO DIRETA DE 1 CLIQUE (ZERO BIFURCAÇÕES) -->
+      <nav class="mode-switcher" aria-label="Fluxos Principais">
+        <button class="mode-btn active" id="nav-btn-generator" onclick="switchMode('generator')">
+          <span class="mode-step-num">1</span>
+          Gerar &amp; Diagramar Prova
+        </button>
+        <button class="mode-btn" id="nav-btn-grader" onclick="switchMode('grader')">
+          <span class="mode-step-num">2</span>
+          Corrigir por Foto
+        </button>
+        <button class="mode-btn" id="nav-btn-vault" onclick="switchMode('vault')">
+          <span class="mode-step-num">3</span>
+          Backup &amp; Busca Live
+        </button>
+      </nav>
+
+      <div class="topbar-actions">
+        <button class="btn btn-sm" onclick="downloadNativePdf(false)" title="Gerar arquivo PDF diagramado pronto para impressão">
+          📄 Baixar PDF
+        </button>
+        <button class="btn btn-sm btn-emerald" onclick="saveCurrentExamToVault()" title="Salvar prova e imagem no Cofre de Backup">
+          ☁️ Backup Rápido
+        </button>
+      </div>
+    </header>
+
+    <!-- =========================================================
+         MODO 1: GERADOR DE QUESTÕES & DIAGRAMAÇÃO A4 MULTIMODELO
+         ========================================================= -->
+    <main class="workspace active" id="view-generator">
+      <!-- PAINEL ESQUERDO: ALIMENTAÇÃO DE MATERIAL / DIRETRIZ & PARÂMETROS EM 1 CLIQUE -->
+      <section class="pane-left">
+        <!-- PASSO 1: FONTE DO CONHECIMENTO / DIRETRIZES DA SAÚDE -->
+        <div class="panel-card">
+          <div class="panel-card-header">
+            <div class="panel-card-title">
+              <span class="step-badge">1</span>
+              Material do Professor ou Diretriz
+            </div>
+            <label class="btn btn-sm" style="cursor:pointer;">
+              📎 Enviar PDF/TXT
+              <input type="file" id="material-file-input" accept=".pdf,.txt,.md,.json" style="display:none" onchange="handleMaterialUpload(event)" />
+            </label>
+          </div>
+
+          <span class="form-label">Diretrizes Médicas &amp; Acadêmicas Prontas (1 clique):</span>
+          <div class="pill-group" id="guideline-pills" style="margin-bottom:10px;">
+            <button class="pill active" onclick="selectGuideline('sbc_ic', this)">🫀 SBC Insuficiência Cardíaca &amp; HAS</button>
+            <button class="pill" onclick="selectGuideline('sepse_uti', this)">🦠 Surviving Sepsis / Choque Séptico</button>
+            <button class="pill" onclick="selectGuideline('atls_trauma', this)">🚑 ATLS 10ª Ed — Trauma &amp; Via Aérea</button>
+            <button class="pill" onclick="selectGuideline('pediatria_sus', this)">👶 Pediatria &amp; PNI / SUS</button>
+            <button class="pill" onclick="selectGuideline('farmaco_clinica', this)">💊 Farmacologia &amp; Antimicrobianos</button>
+          </div>
+
+          <span class="form-label">Ou cole/edite seu resumo, artigo, aula ou diretriz abaixo:</span>
+          <textarea id="professor-source-text" class="textarea-field" placeholder="Cole aqui os pontos-chave da sua aula, diretriz clínica ou protocolo institucional. O Otto extrairá questões de múltipla escolha e dissertativas com espelho conceitual..."></textarea>
+        </div>
+
+        <!-- PASSO 2: CONFIGURAÇÃO DIRETA DA PROVA (SEM MODAIS) -->
+        <div class="panel-card">
+          <div class="panel-card-header">
+            <div class="panel-card-title">
+              <span class="step-badge">2</span>
+              Composição &amp; Rigor das Questões
+            </div>
+          </div>
+
+          <div style="margin-bottom:10px;">
+            <span class="form-label">Formato das Questões:</span>
+            <div class="pill-group" id="qformat-pills">
+              <button class="pill active" onclick="setGeneratorParam('format', 'mista', this)">⚡ Mista (Múltipla Escolha + Dissertativas)</button>
+              <button class="pill" onclick="setGeneratorParam('format', 'mc', this)">🔘 Só Múltipla Escolha (A–E)</button>
+              <button class="pill" onclick="setGeneratorParam('format', 'essay', this)">✍️ Só Dissertativas (Conceito)</button>
+            </div>
+          </div>
+
+          <div class="grid-2" style="margin-bottom:10px;">
+            <div>
+              <span class="form-label">Quantidade Rápida:</span>
+              <div class="pill-group" id="qcount-pills">
+                <button class="pill" onclick="setGeneratorParam('count', 4, this)">4 Qs</button>
+                <button class="pill active" onclick="setGeneratorParam('count', 6, this)">6 Qs</button>
+                <button class="pill" onclick="setGeneratorParam('count', 8, this)">8 Qs</button>
+                <button class="pill" onclick="setGeneratorParam('count', 10, this)">10 Qs</button>
+              </div>
+            </div>
+            <div>
+              <span class="form-label">Complexidade:</span>
+              <div class="pill-group" id="qlevel-pills">
+                <button class="pill" onclick="setGeneratorParam('level', 'graduacao', this)">Graduação</button>
+                <button class="pill active" onclick="setGeneratorParam('level', 'residencia', this)">Residência / Caso</button>
+              </div>
+            </div>
+          </div>
+
+          <button class="btn btn-primary" style="width:100%; padding:11px; font-size:13.5px;" onclick="generateExamFromMaterial()">
+            ⚡ Gerar Questões &amp; Diagramar Prova Agora
+          </button>
+        </div>
+
+        <!-- PASSO 3: DADOS DO CABEÇALHO E MODELO DE DIAGRAMAÇÃO -->
+        <div class="panel-card">
+          <div class="panel-card-header">
+            <div class="panel-card-title">
+              <span class="step-badge">3</span>
+              Cabeçalho &amp; Estilo de Diagramação
+            </div>
+          </div>
+
+          <div class="grid-2" style="margin-bottom:8px;">
+            <div>
+              <label class="form-label">Instituição / Hospital</label>
+              <input type="text" id="meta-institution" class="input-field" value="UNIVERSIDADE FEDERAL DO AMAZONAS — FACULDADE DE MEDICINA" oninput="syncExamHeader()" />
+            </div>
+            <div>
+              <label class="form-label">Disciplina / Assunto</label>
+              <input type="text" id="meta-subject" class="input-field" value="Clínica Médica — Cardiologia &amp; Terapia Intensiva" oninput="syncExamHeader()" />
+            </div>
+          </div>
+
+          <div class="grid-2" style="margin-bottom:8px;">
+            <div>
+              <label class="form-label">Título da Avaliação</label>
+              <input type="text" id="meta-title" class="input-field" value="Prova Oficial P1 — Diretrizes Clínicas &amp; Conduta" oninput="syncExamHeader()" />
+            </div>
+            <div>
+              <label class="form-label">Professor(a) &amp; Data</label>
+              <input type="text" id="meta-professor" class="input-field" value="Prof. Dr. Otto • 21/10/2026" oninput="syncExamHeader()" />
+            </div>
+          </div>
+
+          <div style="margin-top:10px;">
+            <span class="form-label">Adicionar Imagem Clínica / Figura de Apoio na Prova (com Backup Automático):</span>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <label class="btn btn-sm" style="cursor:pointer;">
+                🖼️ Anexar Imagem na Prova
+                <input type="file" accept="image/*" style="display:none" onchange="attachExamFigure(event)" />
+              </label>
+              <button class="btn btn-sm" onclick="addCustomQuestionModal()">+ Nova Questão Manual</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PAINEL DIREITO: FOLHA A4 INTERATIVA & TROCA DE MODELO EM 1 CLIQUE -->
+      <section class="pane-right">
+        <div class="a4-toolbar">
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <span style="font-size:11.5px; font-weight:800; text-transform:uppercase;">Modelo de Prova:</span>
+            <button class="pill active" id="style-btn-classico" onclick="setExamStyle('classico')">
+              📄 Clássico Universitário
+            </button>
+            <button class="pill" id="style-btn-duas_colunas" onclick="setExamStyle('duas_colunas')">
+              📰 Residência (2 Colunas)
+            </button>
+            <button class="pill" id="style-btn-clinico" onclick="setExamStyle('clinico')">
+              🏥 Prático / Caso Clínico (OSCE)
+            </button>
+          </div>
+
+          <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+            <button class="btn btn-sm" onclick="shuffleExamVersion()" title="Embaralha a ordem das questões e alternativas gerando novo caderno (Alfa, Beta, Gama)">
+              🔀 Embaralhar Versão (<span id="current-version-label">CADERNO ALFA</span>)
+            </button>
+            <button class="btn btn-sm" id="toggle-teacher-key-btn" onclick="toggleTeacherKeyOnSheet()">
+              👁️ Espelho do Professor: ON
+            </button>
+            <button class="btn btn-sm btn-cobalt" onclick="downloadNativePdf(true)">
+              📥 PDF + Gabarito
+            </button>
+            <button class="btn btn-sm btn-primary" onclick="window.print()">
+              🖨️ Imprimir A4
+            </button>
+          </div>
+        </div>
+
+        <!-- PALCO DA FOLHA A4 -->
+        <div class="a4-stage" id="a4-sheet-container">
+          <article class="a4-sheet style-classico" id="exam-a4-sheet">
+            <div class="a4-ink-rule-top"></div>
+
+            <!-- CABEÇALHO DA PROVA COM IDENTIDADE OTTO -->
+            <div class="a4-header-box">
+              <div class="a4-mascot-seal">
+                <img id="sheet-otto-avatar" src="assets/otto-avatar.png" alt="Otto" />
+                <span>OTTO.</span>
+              </div>
+              <div class="a4-inst-info">
+                <h2 id="sheet-institution">UNIVERSIDADE FEDERAL DO AMAZONAS — FACULDADE DE MEDICINA</h2>
+                <h1 id="sheet-title">Prova Oficial P1 — Diretrizes Clínicas &amp; Conduta</h1>
+                <div class="a4-inst-meta">
+                  <span id="sheet-subject"><strong>Assunto:</strong> Clínica Médica — Cardiologia &amp; Terapia Intensiva</span>
+                  <span id="sheet-professor"><strong>Docente:</strong> Prof. Dr. Otto • 21/10/2026</span>
+                </div>
+              </div>
+              <div class="a4-version-stamp">
+                <span class="ver-name" id="sheet-version-badge">CADERNO ALFA</span>
+                <span class="ver-sub" id="sheet-style-badge">MODELO CLÁSSICO</span>
+                <span class="ver-sub" id="sheet-qcount-badge">6 QUESTÕES • 10,0 PTS</span>
+              </div>
+            </div>
+
+            <!-- IDENTIFICAÇÃO DO ALUNO -->
+            <div class="a4-student-strip">
+              <div>ALUNO(A): ______________________________________________________</div>
+              <div>MATRÍCULA: _______________</div>
+              <div>NOTA: _________</div>
+            </div>
+
+            <!-- CARTÃO OMR PARA LEITURA POR FOTO -->
+            <div class="a4-omr-banner">
+              <div style="font-size:10.5px; font-weight:800; text-transform:uppercase;">
+                📸 Grade OMR Rápida (Fotografe esta área na aba "Corrigir por Foto"):
+              </div>
+              <div class="a4-omr-grid" id="sheet-omr-grid"></div>
+            </div>
+
+            <!-- FIGURA ANEXADA (SE HOUVER) -->
+            <div id="sheet-attached-figure-wrap" style="display:none; margin-bottom:16px; border:1.5px solid #121212; padding:10px; background:#FAF8F5; text-align:center;">
+              <div style="font-size:10.5px; font-weight:800; text-transform:uppercase; margin-bottom:6px; display:flex; justify-content:space-between;">
+                <span>Figura Clínica / Imagem de Referência da Prova</span>
+                <button class="q-inline-btn" onclick="removeAttachedFigure()">Remover Figura</button>
+              </div>
+              <img id="sheet-attached-figure-img" src="" alt="Figura da Prova" style="max-height:190px; max-width:100%; object-fit:contain;" />
+            </div>
+
+            <!-- CORPO DAS QUESTÕES DIAGRAMADAS -->
+            <div class="a4-questions-body" id="sheet-questions-list"></div>
+
+            <!-- RODAPÉ NANQUIM -->
+            <div style="margin-top:26px; padding-top:8px; border-top:2px solid #121212; display:flex; justify-content:space-between; font-size:10px; color:#444; font-family:'JetBrains Mono', monospace;">
+              <span>OTTO. SISTEMA EDITORIAL DE AVALIAÇÃO DOCENTE</span>
+              <span id="sheet-footer-code">CÓD. AUTENTICAÇÃO: OTTO-2026-ALFA</span>
+            </div>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <!-- =========================================================
+         MODO 2: CORREÇÃO POR FOTO DA PROVA DO ALUNO (OMR + DISSERTATIVA)
+         ========================================================= -->
+    <main class="workspace" id="view-grader">
+      <!-- PAINEL ESQUERDO: CAPTURA DE FOTO DA PROVA & ESCANEAMENTO -->
+      <section class="pane-left">
+        <div class="panel-card">
+          <div class="panel-card-header">
+            <div class="panel-card-title">
+              <span class="step-badge">1</span>
+              Foto da Prova do Aluno
+            </div>
+            <label class="btn btn-sm btn-primary" style="cursor:pointer;">
+              📸 Fotografar / Enviar Foto
+              <input type="file" id="student-photo-input" accept="image/*" capture="environment" style="display:none" onchange="handleStudentPhotoUpload(event)" />
+            </label>
+          </div>
+
+          <span class="form-label">Ou teste agora em 1 clique com uma Prova Respondida de Exemplo:</span>
+          <div class="pill-group" id="sample-student-pills" style="margin-bottom:10px;">
+            <button class="pill active" onclick="loadStudentSample('mariana_alta', this)">👩‍⚕️ Mariana Silva (Desempenho Alto)</button>
+            <button class="pill" onclick="loadStudentSample('lucas_parcial', this)">👨‍⚕️ Lucas Mendes (Parcial / Sinônimos)</button>
+            <button class="pill" onclick="loadStudentSample('rafael_critico', this)">🧑‍⚕️ Pedro Costa (Conceito Incompleto)</button>
+          </div>
+
+          <!-- VISOR DE ESCANEAMENTO DA PROVA -->
+          <div class="photo-scanner-frame">
+            <div class="scanner-canvas-wrap" id="scanner-preview-box">
+              <img id="scanned-exam-img" src="" alt="Foto da Prova do Aluno" />
+              <div class="scan-laser" id="scan-laser-bar"></div>
+            </div>
+            <div style="padding:10px 12px; background:#1F1F1F; border-top:1px solid #333; display:flex; align-items:center; justify-content:space-between; gap:8px;">
+              <div style="font-size:11.5px; color:#D4D4D4;">
+                <strong style="color:#10B981;">● Visão OMR + OCR Ativa:</strong> Gabarito vinculado à prova atual
+              </div>
+              <button class="btn btn-sm btn-emerald" onclick="runFullExamGrading()">
+                🔍 Reanalisar Foto
+              </button>
+            </div>
+          </div>
+
+          <div class="grid-2" style="margin-top:10px;">
+            <div>
+              <label class="form-label">Nome do Aluno(a) Detectado</label>
+              <input type="text" id="graded-student-name" class="input-field" value="Mariana Silva (Mat. 2026104)" />
+            </div>
+            <div>
+              <label class="form-label">Turma / Instituição</label>
+              <input type="text" id="graded-student-inst" class="input-field" value="UFAM — Internato Clínica Médica" />
+            </div>
+          </div>
+        </div>
+
+        <!-- RESUMO EXECUTIVO DA NOTA E SALVAMENTO EM 1 CLIQUE -->
+        <div class="panel-card" style="background:var(--bg-ink); color:#FFFFFF;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <img class="otto-inline-avatar" src="assets/otto-avatar.png" alt="Otto" style="width:42px; height:42px; border-radius:50%; background:#FFF; padding:2px;" />
+              <div>
+                <div style="font-size:11px; text-transform:uppercase; color:#A3A3A3; font-family:'JetBrains Mono', monospace;">Parecer Final do Otto</div>
+                <div style="font-size:24px; font-weight:800; color:#34D399;" id="final-grade-display">9,2 / 10,0</div>
+              </div>
+            </div>
+            <div style="text-align:right; font-family:'JetBrains Mono', monospace; font-size:11.5px;">
+              <div id="grade-mc-summary">Múltipla Escolha: 4/4</div>
+              <div id="grade-essay-summary">Dissertativas: 92%</div>
+            </div>
+          </div>
+          <p id="otto-grade-comment" style="font-size:12px; color:#E5E5E5; margin-bottom:12px; line-height:1.4;">
+            "Excelente domínio fisiopatológico e terapêutico. As palavras-chave essenciais das diretrizes foram contempladas com precisão."
+          </p>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-emerald" style="flex:1;" onclick="saveGradedExamToBackup()">
+              💾 Salvar Correção &amp; Foto no Backup
+            </button>
+            <button class="btn" onclick="exportStudentReportCard()">
+              📄 Boletim PDF
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- PAINEL DIREITO: RESULTADO DETALHADO (MÚLTIPLA ESCOLHA + DISSERTATIVAS POR PALAVRAS-CHAVE) -->
+      <section class="pane-right">
+        <!-- BLOCO 1: CORREÇÃO DAS QUESTÕES DE MÚLTIPLA ESCOLHA (OMR) -->
+        <div class="panel-card">
+          <div class="panel-card-header">
+            <div class="panel-card-title">
+              <span class="step-badge">A</span>
+              Análise Óptica de Múltipla Escolha (Clique na bolha se desejar ajustar)
+            </div>
+            <span class="brand-tag" id="omr-hit-badge" style="background:var(--accent-emerald);">100% ACERTO OMR</span>
+          </div>
+          <div class="omr-correction-grid" id="grader-omr-list"></div>
+        </div>
+
+        <!-- BLOCO 2: CORREÇÃO DE DISSERTATIVAS POR GABARITO DE CONCEITO E PALAVRAS-CHAVE -->
+        <div class="panel-card">
+          <div class="panel-card-header">
+            <div class="panel-card-title">
+              <span class="step-badge">B</span>
+              Correção de Dissertativas por Conceito &amp; Palavras-Chave
+            </div>
+            <span style="font-size:11.5px; color:var(--text-secondary);">Edite a transcrição OCR ou as palavras-chave em tempo real</span>
+          </div>
+          <div id="grader-essay-list"></div>
+        </div>
+      </section>
+    </main>
+
+    <!-- =========================================================
+         MODO 3: COFRE DE BACKUP DE IMAGENS COM FILTROS & LIVE PREVIEW EM TEMPO REAL
+         ========================================================= -->
+    <main class="workspace" id="view-vault">
+      <!-- PAINEL ESQUERDO: PESQUISA EM TEMPO REAL + FILTROS RÁPIDOS + GRADE DE ARQUIVOS -->
+      <section class="pane-left">
+        <!-- BARRA DE PESQUISA INSTANTÂNEA (ATUALIZA A CADA TECLA DIGITADA) -->
+        <div class="search-live-bar">
+          <span style="font-size:18px;">🔍</span>
+          <input
+            type="text"
+            id="vault-live-search"
+            placeholder="Digite parte do nome, assunto, data (ex: 2026-10), instituição (UFAM, CERMAM, USP) para pré-visualizar em tempo real..."
+            oninput="handleVaultLiveFilter()"
+            autocomplete="off"
+          />
+          <button class="btn btn-sm" onclick="clearVaultFilters()" title="Limpar todos os filtros">Limpar</button>
+          <label class="btn btn-sm btn-primary" style="cursor:pointer;">
+            + Fazer Backup de Imagem
+            <input type="file" accept="image/*" multiple style="display:none" onchange="uploadNewBackupImages(event)" />
+          </label>
+        </div>
+
+        <!-- FILTROS RÁPIDOS MULTIDIMENSIONAIS (DATA, ASSUNTO, INSTITUIÇÃO, TIPO) -->
+        <div class="panel-card" style="padding:11px 13px;">
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:8px; margin-bottom:8px;">
+            <div>
+              <label class="form-label">Filtrar por Assunto</label>
+              <select id="filter-subject" class="select-field" onchange="handleVaultLiveFilter()">
+                <option value="">Todos os Assuntos</option>
+                <option value="Cardiologia">Cardiologia / IC &amp; HAS</option>
+                <option value="Sepse">Sepse &amp; Terapia Intensiva</option>
+                <option value="Trauma">Trauma / Cirurgia (ATLS)</option>
+                <option value="Pediatria">Pediatria &amp; PNI / SUS</option>
+                <option value="Farmacologia">Farmacologia Clínica</option>
+              </select>
+            </div>
+            <div>
+              <label class="form-label">Filtrar por Instituição</label>
+              <select id="filter-institution" class="select-field" onchange="handleVaultLiveFilter()">
+                <option value="">Todas as Instituições</option>
+                <option value="UFAM">UFAM — Faculdade de Medicina</option>
+                <option value="CERMAM">CERMAM — Residência Médica</option>
+                <option value="USP">FMUSP / HC</option>
+                <option value="ENARE">ENARE / EBSERH</option>
+                <option value="HUGV">HUGV — Hospital Universitário</option>
+              </select>
+            </div>
+            <div>
+              <label class="form-label">Filtrar por Data / Mês</label>
+              <input type="text" id="filter-date" class="input-field" placeholder="Ex: 2026-10 ou 21/10" oninput="handleVaultLiveFilter()" />
+            </div>
+            <div>
+              <label class="form-label">Categoria do Backup</label>
+              <select id="filter-category" class="select-field" onchange="handleVaultLiveFilter()">
+                <option value="">Todas as Imagens &amp; Provas</option>
+                <option value="prova_aluno">📸 Provas Corrigidas de Alunos</option>
+                <option value="matriz_prova">📄 Matrizes de Provas Geradas</option>
+                <option value="imagem_clinica">🩻 Imagens Clínicas / Questões</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="display:flex; align-items:center; justify-content:space-between; font-size:11.5px; color:var(--text-secondary);">
+            <span id="vault-results-counter">Exibindo todos os arquivos do backup</span>
+            <span>⚡ <strong>Live Preview Ativo:</strong> Ao digitar, o 1º resultado abre instantaneamente ao lado</span>
+          </div>
+        </div>
+
+        <!-- GRADE DE RESULTADOS DO BACKUP -->
+        <div class="vault-grid" id="vault-cards-container"></div>
+      </section>
+
+      <!-- PAINEL DIREITO: PRÉ-VISUALIZAÇÃO EM TEMPO REAL AO DIGITAR (LIVE PREVIEW INSPECTOR) -->
+      <section class="pane-right">
+        <div class="live-preview-inspector" id="vault-live-preview-panel">
+          <div class="live-preview-header">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="width:9px; height:9px; border-radius:50%; background:#34D399; display:inline-block;"></span>
+              <span style="font-family:'JetBrains Mono', monospace; font-size:11.5px; font-weight:700; text-transform:uppercase;">
+                Pré-Visualização Instantânea (Live Preview)
+              </span>
+            </div>
+            <span id="preview-item-date" style="font-family:'JetBrains Mono', monospace; font-size:11px; color:#D4D4D4;">—</span>
+          </div>
+
+          <div class="live-preview-stage" id="live-preview-content">
+            <!-- Preenchido em tempo real pelo motor JS -->
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- TOAST DO MASCOTE OTTO -->
+    <div class="otto-toast" id="otto-toast">
+      <img class="otto-inline-avatar" src="assets/otto-avatar.png" alt="Otto" />
+      <div style="font-size:12.5px; line-height:1.35;" id="otto-toast-text">
+        Prova diagramada com sucesso!
+      </div>
+    </div>
+  </div>
+
+  <!-- ASSETS EMBUTIDOS + MOTOR FULL STACK DO OTTO -->
+  <script src="assets/otto-assets.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
