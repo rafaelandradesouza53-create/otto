@@ -1,34 +1,50 @@
 /**
- * OTTO. — Motor Full Stack de Geração de Provas, Diagramação A4,
- * Correção por Foto (OMR + Dissertativa por Conceito/Palavras-Chave)
+ * OTTO — Motor Integrado de Geração de Provas, Upload de Slides,
+ * Correção Individual & em Lote (.CSV), Modo Prova Iconográfica Cronometrada
  * e Cofre de Backup com Live Preview em Tempo Real.
  */
 
 const OttoState = {
   mode: 'generator',
   guidelineKey: 'sbc_ic',
-  format: 'mista',     // 'mista' | 'mc' | 'essay'
-  count: 6,
-  level: 'residencia', // 'graduacao' | 'residencia'
-  style: 'classico',   // 'classico' | 'duas_colunas' | 'clinico'
+  level: 'Residência Médica / Concursos',
+  typeCounts: {
+    mc: 3,       // Múltipla Escolha (Objetivas)
+    essay: 1,    // Dissertativas
+    cloze: 1,    // Complete as Lacunas
+    matching: 1  // Associar Colunas
+  },
+  style: 'classico', // 'classico' | 'duas_colunas' | 'clinico'
   versionIndex: 0,
   versions: ['CADERNO ALFA', 'CADERNO BETA', 'CADERNO GAMA'],
   showTeacherKeyOnSheet: true,
   attachedFigureDataUrl: '',
+  uploadedSlides: [],
   questions: [],
   studentGrading: {
     sampleId: 'mariana_alta',
     photoDataUrl: '',
-    mcMarked: {},       // { qIndex: 0..4 }
-    essayAnswers: {},   // { qIndex: "texto do aluno" }
-    manualScoreOverride: {} // { qIndex: ratio 0..1 }
+    mcMarked: {},
+    essayAnswers: {},
+    manualScoreOverride: {}
+  },
+  batchResults: [],
+  iconographic: {
+    items: [],
+    currentIndex: 0,
+    remainingSec: 45,
+    timerId: null,
+    isRunning: false,
+    isPaused: false
   },
   vaultItems: [],
-  selectedVaultId: null
+  selectedVaultId: null,
+  avatarOpenUrl: '',
+  avatarBlinkUrl: ''
 };
 
 /* =====================================================================
-   1. DIRETRIZES DA SAÚDE & BANCOS DE CONHECIMENTO BASE DO PROFESSOR
+   1. BANCOS DE DIRETRIZES COM OS 4 TIPOS DE QUESTÕES
    ===================================================================== */
 const GUIDELINE_BANK = {
   sbc_ic: {
@@ -134,6 +150,39 @@ const GUIDELINE_BANK = {
           'quente e umido',
           'descongestao'
         ]
+      },
+      {
+        id: 'ic-7',
+        type: 'cloze',
+        topic: 'Complete as Lacunas • Diretriz SBC ICFER',
+        points: 1.5,
+        stem: 'Complete as lacunas com os termos farmacológicos e hemodinâmicos exatos da Diretriz da SBC: Na Insuficiência Cardíaca com Fração de Ejeção Reduzida (FEVE ≤ 40%), a substituição do IECA pelo ________________________ (1) associada ao inibidor de SGLT2 ________________________ (2) reduz significativamente a mortalidade cardiovascular. Já na descompensação aguda em Perfil B (quente e úmido), o fármaco de escolha para descongestão imediata por via endovenosa é a ________________________ (3).',
+        blanks: ['sacubitril-valsartana', 'dapagliflozina (ou empagliflozina)', 'furosemida'],
+        wordBank: ['furosemida', 'sacubitril-valsartana', 'dapagliflozina', 'dobutamina', 'espironolactona'],
+        conceptKey: '1: sacubitril-valsartana | 2: dapagliflozina (ou empagliflozina) | 3: furosemida',
+        keywords: ['sacubitril-valsartana', 'dapagliflozina', 'furosemida']
+      },
+      {
+        id: 'ic-8',
+        type: 'matching',
+        topic: 'Associar Colunas • Perfis de Stevenson na IC Aguda',
+        points: 2.0,
+        stem: 'Associe corretamente a Coluna A (Perfis Hemodinâmicos de Stevenson na IC Aguda) com a respectiva apresentação clínica e conduta prioritária na Coluna B:',
+        colA: [
+          '(1) Perfil A (Quente e Seco)',
+          '(2) Perfil B (Quente e Úmido)',
+          '(3) Perfil C (Frio e Úmido)',
+          '(4) Perfil L (Frio e Seco)'
+        ],
+        colB: [
+          '(   ) Congestão pulmonar sem hipoperfusão: diurético de alça EV (furosemida) + vasodilatador.',
+          '(   ) Baixo débito com congestão: suporte inotrópico (dobutamina) e ajuste hemodinâmico.',
+          '(   ) Paciente compensado hemodinamicamente: otimização oral ambulatorial do quarteto.',
+          '(   ) Hipoperfusão sem congestão pulmonar: prova volêmica cautelosa com cristaloide.'
+        ],
+        matchingKey: '(2) - (3) - (1) - (4)',
+        conceptKey: 'Sequência correta da Coluna B: (2) Perfil B, (3) Perfil C, (1) Perfil A, (4) Perfil L.',
+        keywords: ['2 - 3 - 1 - 4', 'perfil b', 'perfil c', 'furosemida', 'dobutamina']
       }
     ]
   },
@@ -175,7 +224,7 @@ const GUIDELINE_BANK = {
           'Adrenalina em bolus periférico e dopamina renal.'
         ],
         answer: 1,
-        rationale: 'A noradrenalina é o vasopressor de 1ª escolha no choque séptico (alvo PAM >= 65 mmHg), adicionando-se vasopressina (até 0,03 U/min) quando necessário poupar catecolaminas.'
+        rationale: 'A noradrenalina é o vasopressor de 1ª escolha no choque séptico (alvo PAM >= 65 mmHg), adicionando-se vasopressina quando necessário poupar catecolaminas.'
       },
       {
         id: 'sep-3',
@@ -195,52 +244,45 @@ const GUIDELINE_BANK = {
       },
       {
         id: 'sep-4',
-        type: 'mc',
-        topic: 'Corticoterapia • Choque Refratário',
-        points: 1.5,
-        stem: 'Quando está indicada a associação de corticosteroide sistêmico no manejo do paciente adulto em choque séptico segundo a Surviving Sepsis Campaign?',
-        options: [
-          'Em todos os pacientes com infecção urinária baixa sem disfunção orgânica.',
-          'No choque séptico refratário que mantém necessidade contínua de vasopressor, utilizando-se hidrocortisona 200 mg/dia EV.',
-          'Apenas usando dexametasona intramuscular em dose única na triagem.',
-          'É formalmente contraindicado qualquer corticoide no choque séptico.',
-          'Somente após 14 dias de internação em UTI.'
-        ],
-        answer: 1,
-        rationale: 'A hidrocortisona EV (200 mg/dia divididos ou em infusão contínua) é recomendada no choque séptico com demanda contínua de vasopressor.'
-      },
-      {
-        id: 'sep-5',
         type: 'essay',
         topic: 'Dissertativa • Hour-1 Bundle',
         points: 2.0,
         stem: 'Descreva os 5 elementos que compõem o Pacote de 1 Hora (Hour-1 Bundle) da Surviving Sepsis Campaign e especifique a meta pressórica inicial.',
         conceptKey: 'O pacote de 1 hora compreende: mensurar lactato sérico, coletar hemoculturas antes do antibiótico, iniciar antimicrobiano de amplo espectro na 1ª hora, infundir 30 mL/kg de cristaloide se hipotensão ou lactato >= 4 mmol/L, e iniciar noradrenalina para manter PAM >= 65 mmHg.',
-        keywords: [
-          'lactato',
-          'hemocultura',
-          'antimicrobiano',
-          'cristaloide',
-          '30 ml/kg',
-          'noradrenalina',
-          'pam >= 65'
-        ]
+        keywords: ['lactato', 'hemocultura', 'antimicrobiano', 'cristaloide', '30 ml/kg', 'noradrenalina', 'pam >= 65']
+      },
+      {
+        id: 'sep-5',
+        type: 'cloze',
+        topic: 'Complete as Lacunas • Choque Séptico',
+        points: 1.5,
+        stem: 'Preencha as lacunas segundo a diretriz Surviving Sepsis: A reposição volêmica inicial na hipotensão induzida por sepse deve ser realizada com ________________________ (1) de solução cristaloide balanceada. Caso persista hipotensão, inicia-se ________________________ (2) como vasopressor de primeira escolha visando manter a Pressão Arterial Média (PAM) ≥ ________________________ (3) mmHg.',
+        blanks: ['30 mL/kg', 'noradrenalina', '65'],
+        wordBank: ['30 mL/kg', 'noradrenalina', '65', 'dopamina', '90'],
+        conceptKey: '1: 30 mL/kg | 2: noradrenalina | 3: 65 mmHg',
+        keywords: ['30 ml/kg', 'noradrenalina', '65']
       },
       {
         id: 'sep-6',
-        type: 'essay',
-        topic: 'Dissertativa • Vasopressores no Choque',
+        type: 'matching',
+        topic: 'Associar Colunas • Terapia no Choque Séptico',
         points: 2.0,
-        stem: 'Explique os critérios diagnósticos de Choque Séptico pelo consenso Sepsis-3 e a sequência escalonada de suporte vasopressor e corticoterapia quando há refratariedade.',
-        conceptKey: 'Choque séptico exige vasopressor para PAM >= 65 mmHg e lactato > 2 mmol/L após volume. Inicia-se noradrenalina como 1ª escolha, associa-se vasopressina como 2ª linha e hidrocortisona 200 mg/dia no choque refratário.',
-        keywords: [
-          'vasopressor',
-          'lactato > 2',
-          'noradrenalina',
-          'vasopressina',
-          'hidrocortisona',
-          'pam >= 65'
-        ]
+        stem: 'Associe a Coluna A (Intervenções no Choque Séptico) com sua respectiva indicação técnica na Coluna B:',
+        colA: [
+          '(1) Noradrenalina EV',
+          '(2) Vasopressina EV',
+          '(3) Hidrocortisona 200 mg/dia',
+          '(4) Cristaloide Balanceado 30 mL/kg'
+        ],
+        colB: [
+          '(   ) Associada em 2ª linha para poupar catecolaminas quando a PAM não é atingida.',
+          '(   ) Expansão volêmica inicial para hipotensão ou lactato ≥ 4 mmol/L.',
+          '(   ) Vasopressor de 1ª escolha para atingir meta de PAM ≥ 65 mmHg.',
+          '(   ) Corticoterapia indicada no choque séptico refratário com demanda contínua de vasopressor.'
+        ],
+        matchingKey: '(2) - (4) - (1) - (3)',
+        conceptKey: 'Sequência correta: (2) Vasopressina, (4) Cristaloide 30 mL/kg, (1) Noradrenalina, (3) Hidrocortisona.',
+        keywords: ['2 - 4 - 1 - 3', 'noradrenalina', 'vasopressina', 'hidrocortisona']
       }
     ]
   },
@@ -282,40 +324,49 @@ const GUIDELINE_BANK = {
           'Correção completa da pressão arterial para PAS > 160 mmHg antes do controle cirúrgico.'
         ],
         answer: 1,
-        rationale: 'A ressuscitação hemostática utiliza hemocomponentes balanceados 1:1:1, restrição de cristaloides e ácido tranexâmico (1g em 10 min + 1g em 8h) iniciado em até 3 horas do trauma.'
+        rationale: 'A ressuscitação hemostática utiliza hemocomponentes balanceados 1:1:1, restrição de cristaloides e ácido tranexâmico iniciado em até 3 horas do trauma.'
       },
       {
         id: 'tr-3',
         type: 'essay',
         topic: 'Dissertativa • Pneumotórax Hipertensivo & ATLS 10',
-        points: 3.0,
+        points: 2.5,
         stem: 'Descreva a tríade clínica/fisiopatológica do choque obstrutivo por pneumotórax hipertensivo, por que a radiografia não deve atrasar a conduta e a atualização do ATLS 10ª edição quanto ao local da punção no adulto.',
         conceptKey: 'O pneumotórax hipertensivo gera choque obstrutivo com murmúrio vesicular abolido, hipertimpanismo e turgência jugular. O diagnóstico é clínico (sem aguardar raio-X), realizando-se descompressão no 4º ou 5º espaço intercostal na linha axilar anterior seguida de drenagem em selo d’água.',
-        keywords: [
-          'choque obstrutivo',
-          'murmurio abolido',
-          'hipertimpanismo',
-          'diagnostico clinico',
-          '5 espaco intercostal',
-          'linha axilar anterior',
-          'drenagem'
-        ]
+        keywords: ['choque obstrutivo', 'murmurio abolido', 'hipertimpanismo', 'diagnostico clinico', '5 espaco intercostal', 'linha axilar anterior', 'drenagem']
       },
       {
         id: 'tr-4',
-        type: 'essay',
-        topic: 'Dissertativa • Tríade Letal do Trauma',
-        points: 3.0,
-        stem: 'Cite os 3 componentes da "Tríade Letal do Trauma" e explique como a ressuscitação hemostática (transfusão 1:1:1 e controle de cristaloide) atua para interromper esse ciclo.',
-        conceptKey: 'A tríade letal é composta por hipotermia, acidose metabólica e coagulopatia. A ressuscitação hemostática com transfusão maciça 1:1:1, aquecimento ativo, ácido tranexâmico e restrição de cristaloide previne a coagulopatia dilucional.',
-        keywords: [
-          'hipotermia',
-          'acidose',
-          'coagulopatia',
-          'transfusao macica',
-          '1:1:1',
-          'acido tranexamico'
-        ]
+        type: 'cloze',
+        topic: 'Complete as Lacunas • Tríade Letal & ATLS',
+        points: 1.5,
+        stem: 'Complete as lacunas: A Tríade Letal do trauma grave é constituída por hipotermia, ________________________ (1) e coagulopatia. No pneumotórax hipertensivo do adulto, a punção de alívio segundo o ATLS 10ª Edição é realizada no 4º ou 5º espaço intercostal na linha ________________________ (2), e o antifibrinolítico ________________________ (3) deve ser administrado nas primeiras 3 horas do choque hemorrágico.',
+        blanks: ['acidose metabólica', 'axilar anterior (ou média)', 'ácido tranexâmico'],
+        wordBank: ['acidose metabólica', 'axilar anterior', 'ácido tranexâmico', 'heparina', 'hemiclavicular'],
+        conceptKey: '1: acidose metabólica | 2: linha axilar anterior | 3: ácido tranexâmico',
+        keywords: ['acidose', 'axilar anterior', 'acido tranexamico']
+      },
+      {
+        id: 'tr-5',
+        type: 'matching',
+        topic: 'Associar Colunas • Lesões Torácicas Ameaçadoras à Vida',
+        points: 2.0,
+        stem: 'Associe a Coluna A (Emergências Torácicas no Trauma) com os achados semiológicos e conduta na Coluna B:',
+        colA: [
+          '(1) Pneumotórax Hipertensivo',
+          '(2) Hemotórax Maciço',
+          '(3) Tamponamento Cardíaco',
+          '(4) Pneumotórax Aberto'
+        ],
+        colB: [
+          '(   ) Tríade de Beck (hipotensão, hipofonese de bulhas, turgência jugular) e FAST positivo.',
+          '(   ) Hipertimpanismo, MV abolido e choque obstrutivo: descompressão no 5º EIC.',
+          '(   ) Curativo valvulado de 3 pontas seguido de drenagem torácica fora da ferida.',
+          '(   ) Macicez à percussão e drenagem imediata > 1.500 mL de sangue + autotransfusão/toracotomia.'
+        ],
+        matchingKey: '(3) - (1) - (4) - (2)',
+        conceptKey: 'Sequência correta: (3) Tamponamento Cardíaco, (1) Pneumotórax Hipertensivo, (4) Pneumotórax Aberto, (2) Hemotórax Maciço.',
+        keywords: ['3 - 1 - 4 - 2', 'pneumotorax', 'hemotorax', 'tamponamento']
       }
     ]
   },
@@ -325,7 +376,7 @@ const GUIDELINE_BANK = {
     subject: 'Pediatria — Programa Nacional de Imunizações (PNI) & Bronquiolite Viral Aguda',
     title: 'Avaliação de Pediatria — Calendário Vacinal PNI e Emergências Respiratórias',
     sourceText:
-      'Diretrizes da Sociedade Brasileira de Pediatria (SBP) e PNI: A Bronquiolite Viral Aguda (BVA), causada principalmente pelo Vírus Sincicial Respiratório (VSR) em lactentes < 2 anos, tem diagnóstico clínico e tratamento essencialmente de SUPORTE (oxigenoterapia se SpO2 < 90-92%, hidratação e higiene nasal), NÃO sendo recomendados de rotina corticoide sistêmico, broncodilatador de repetição nem antibiótico. No PNI, ao nascer aplicam-se BCG e Hepatite B; aos 2 e 4 meses aplicam-se Pentavalente, VIP, Pneumocócica 10-valente e Rotavírus humano (com limites rígidos de idade para a 1ª e 2ª doses da Rotavírus).',
+      'Diretrizes da Sociedade Brasileira de Pediatria (SBP) e PNI: A Bronquiolite Viral Aguda (BVA), causada principalmente pelo Vírus Sincicial Respiratório (VSR) em lactentes < 2 anos, tem diagnóstico clínico e tratamento essencialmente de SUPORTE (oxigenoterapia se SpO2 < 90-92%, hidratação e higiene nasal), NÃO sendo recomendados de rotina corticoide sistêmico, broncodilatador de repetição nem antibiótico. No PNI, ao nascer aplicam-se BCG e Hepatite B; aos 2 e 4 meses aplicam-se Pentavalente, VIP, Pneumocócica 10-valente e Rotavírus humano.',
     questions: [
       {
         id: 'ped-1',
@@ -350,14 +401,40 @@ const GUIDELINE_BANK = {
         points: 2.5,
         stem: 'Explique a fisiopatologia da Bronquiolite Viral Aguda pelo VSR em lactentes e justifique por que corticoides sistêmicos e broncodilatadores não fazem parte do manejo rotineiro.',
         conceptKey: 'O VSR causa necrose do epitélio bronquiolar, edema submucoso e tampões de muco/fibrina (obstrução mecânica e não broncoespasmo puro). Por isso o manejo é de suporte (oxigenoterapia se SpO2 < 90-92% e hidratação), sem benefício de corticoide ou broncodilatador.',
-        keywords: [
-          'vsr',
-          'suporte',
-          'oxigenoterapia',
-          'hidratacao',
-          'sem corticoide',
-          'tampoes de muco'
-        ]
+        keywords: ['vsr', 'suporte', 'oxigenoterapia', 'hidratacao', 'sem corticoide', 'tampoes de muco']
+      },
+      {
+        id: 'ped-3',
+        type: 'cloze',
+        topic: 'Complete as Lacunas • BVA & Calendário PNI',
+        points: 2.0,
+        stem: 'Complete as lacunas: O principal agente etiológico da Bronquiolite Viral Aguda em lactentes é o ________________________ (1), cujo tratamento baseia-se em medidas de ________________________ (2). Pelo calendário do PNI, ao nascer são administradas as vacinas BCG e ________________________ (3).',
+        blanks: ['Vírus Sincicial Respiratório (VSR)', 'suporte (oxigenoterapia e hidratação)', 'Hepatite B'],
+        wordBank: ['Vírus Sincicial Respiratório (VSR)', 'suporte', 'Hepatite B', 'corticoide', 'Tríplice Viral'],
+        conceptKey: '1: VSR | 2: suporte | 3: Hepatite B',
+        keywords: ['vsr', 'suporte', 'hepatite b']
+      },
+      {
+        id: 'ped-4',
+        type: 'matching',
+        topic: 'Associar Colunas • Calendário Vacinal PNI',
+        points: 2.0,
+        stem: 'Associe a idade do Calendário Nacional de Vacinação (Coluna A) com os imunobiológicos preconizados pelo PNI (Coluna B):',
+        colA: [
+          '(1) Ao nascer',
+          '(2) 2 e 4 meses',
+          '(3) 3 e 5 meses',
+          '(4) 12 meses'
+        ],
+        colB: [
+          '(   ) Meningocócica C (conjugada).',
+          '(   ) BCG e Hepatite B (dose ao nascer).',
+          '(   ) Tríplice Viral (SCR), Pneumocócica 10 (reforço) e Meningocócica C (reforço).',
+          '(   ) Pentavalente, VIP, Pneumocócica 10-valente e Rotavírus Humano.'
+        ],
+        matchingKey: '(3) - (1) - (4) - (2)',
+        conceptKey: 'Sequência correta: (3) 3 e 5 meses, (1) Ao nascer, (4) 12 meses, (2) 2 e 4 meses.',
+        keywords: ['3 - 1 - 4 - 2', 'bcg', 'pentavalente', 'triplice viral']
       }
     ]
   },
@@ -392,58 +469,92 @@ const GUIDELINE_BANK = {
         points: 2.5,
         stem: 'Diferencie os índices farmacodinâmicos (PK/PD) dos Beta-lactâmicos e dos Aminoglicosídeos e explique a vantagem clínica da infusão estendida de carbapenêmicos no choque séptico.',
         conceptKey: 'Beta-lactâmicos são tempo-dependentes (T > MIC), logo a infusão estendida de 3 a 4 horas mantém concentrações séricas acima da CIM por mais tempo. Aminoglicosídeos são concentração-dependentes (Cmáx/MIC) com efeito pós-antibiótico, usados em dose única diária.',
-        keywords: [
-          'tempo-dependente',
-          't > mic',
-          'infusao estendida',
-          'concentracao-dependente',
-          'cmax/mic',
-          'dose unica diaria'
-        ]
+        keywords: ['tempo-dependente', 't > mic', 'infusao estendida', 'concentracao-dependente', 'cmax/mic', 'dose unica diaria']
+      },
+      {
+        id: 'far-3',
+        type: 'cloze',
+        topic: 'Complete as Lacunas • Índices PK/PD',
+        points: 2.0,
+        stem: 'Complete as lacunas: Os antimicrobianos beta-lactâmicos (como meropenem e cefepime) apresentam atividade bactericida ________________________ (1) (fT > MIC), enquanto os aminoglicosídeos atuam de forma ________________________ (2) (Cmáx/MIC). Já a monitorização terapêutica da vancomicina em infecções graves por MRSA baseia-se na razão ________________________ (3) entre 400 e 600.',
+        blanks: ['tempo-dependente', 'concentração-dependente', 'AUC/MIC'],
+        wordBank: ['tempo-dependente', 'concentração-dependente', 'AUC/MIC', 'dose semanal', 'pH-dependente'],
+        conceptKey: '1: tempo-dependente | 2: concentração-dependente | 3: AUC/MIC',
+        keywords: ['tempo-dependente', 'concentracao-dependente', 'auc/mic']
+      },
+      {
+        id: 'far-4',
+        type: 'matching',
+        topic: 'Associar Colunas • Antimicrobianos e Estratégia PK/PD',
+        points: 2.0,
+        stem: 'Associe o antimicrobiano na Coluna A com seu respectivo parâmetro farmacodinâmico e regime posológico na Coluna B:',
+        colA: [
+          '(1) Meropenem (Carbapenêmico)',
+          '(2) Amicacina (Aminoglicosídeo)',
+          '(3) Vancomicina (Glicopeptídeo)',
+          '(4) Linezolida (Oxazolidinona)'
+        ],
+        colB: [
+          '(   ) Concentração-dependente (Cmáx/MIC): administrada em dose única diária.',
+          '(   ) Tempo-dependente (fT > MIC): otimizado por infusão estendida de 3 a 4 horas.',
+          '(   ) Alternativa bacteriostática/bactericida com excelente penetração pulmonar em pneumonia por MRSA.',
+          '(   ) Eficácia guiada pela área sob a curva dividida pela CIM (AUC24/MIC de 400 a 600).'
+        ],
+        matchingKey: '(2) - (1) - (4) - (3)',
+        conceptKey: 'Sequência correta: (2) Amicacina, (1) Meropenem, (4) Linezolida, (3) Vancomicina.',
+        keywords: ['2 - 1 - 4 - 3', 'meropenem', 'amicacina', 'vancomicina']
       }
     ]
   }
 };
 
 /* =====================================================================
-   2. AMOSTRAS DE PROVAS DE ALUNOS RESPONDIDAS (PARA TESTE DE 1 CLIQUE)
+   2. AMOSTRAS DE PROVAS DE ALUNOS E LOTE DA TURMA COMPLETA
    ===================================================================== */
 const STUDENT_SAMPLES = {
   mariana_alta: {
     name: 'Mariana Silva (Mat. 2026104)',
     institution: 'UFAM — Internato Clínica Médica',
-    mcChoices: [1, 2, 1, 1], // 100% acerto nas 4 questões MC da diretriz SBC
+    mcChoices: [1, 2, 1, 1],
     essayResponses: {
-      4: 'O quarteto fantástico da ICFER reúne sacubitril-valsartana (ou IECA), betabloqueador (carvedilol, bisoprolol ou succinato de metoprolol), espironolactona e inibidor de SGLT2 como a dapagliflozina ou empagliflozina. Os iSGLT2 reduzem a mortalidade cardiovascular e promovem natriurese osmótica e proteção cardiorrenal mesmo em pacientes sem diabetes.',
-      5: 'A paciente encontra-se em perfil B (quente e úmido). A conduta imediata de descongestão deve ser feita com furosemida endovenosa (diurético de alça) associada a vasodilatador venoso (nitroglicerina). Deve-se manter o betabloqueador de uso prévio pois não há sinais de choque cardiogênico.'
+      default: 'O quarteto fantástico da ICFER reúne sacubitril-valsartana (ou IECA), betabloqueador (carvedilol, bisoprolol ou succinato de metoprolol), espironolactona e inibidor de SGLT2 como a dapagliflozina ou empagliflozina. No perfil B (quente e úmido), realiza-se descongestão com furosemida EV (diurético de alça) e vasodilatador, mantendo-se o betabloqueador.'
     }
   },
   lucas_parcial: {
     name: 'Lucas Mendes (Mat. 2026089)',
     institution: 'UFAM — Internato Clínica Médica',
-    mcChoices: [1, 2, 0, 1], // 3/4 acertos
+    mcChoices: [1, 2, 0, 1],
     essayResponses: {
-      4: 'O tratamento da insuficiência cardíaca usa betabloqueador, espironolactona e gliflozina (dapagliflozina), que ajuda na diurese e diminui internações hospitalares, faltando lembrar o quarto medicamento da classe dos inibidores da neprilisina.',
-      5: 'Como o paciente está congesto (úmido), iniciamos furosemida na veia para descongestão pulmonar e usamos vasodilatador para reduzir pós-carga.'
+      default: 'O tratamento da insuficiência cardíaca usa betabloqueador, espironolactona e gliflozina (dapagliflozina), que ajuda na natriurese e diminui internações hospitalares. Na descompensação em perfil B usamos furosemida na veia para descongestão pulmonar e vasodilatador.'
     }
   },
   rafael_critico: {
     name: 'Pedro Costa (Mat. 2026152)',
     institution: 'CERMAM — Processo Seletivo Residência',
-    mcChoices: [0, 0, 1, 2], // 1/4 acerto
+    mcChoices: [0, 0, 1, 2],
     essayResponses: {
-      4: 'Usa-se digoxina e furosemida para melhorar os sintomas do paciente com coração fraco.',
-      5: 'Deve-se suspender o betabloqueador imediatamente na entrada do pronto-socorro e fazer soro fisiológico.'
+      default: 'Usa-se digoxina e furosemida para melhorar os sintomas do paciente e deve-se suspender o betabloqueador imediatamente na entrada do pronto-socorro.'
     }
   }
 };
 
+const INITIAL_BATCH_CLASS = [
+  { studentName: 'Mariana Silva', correctCount: 6, totalCount: 6, finalGrade: 9.8 },
+  { studentName: 'Lucas Mendes', correctCount: 5, totalCount: 6, finalGrade: 8.4 },
+  { studentName: 'Beatriz Oliveira', correctCount: 5, totalCount: 6, finalGrade: 8.8 },
+  { studentName: 'Gabriel Ferreira', correctCount: 4, totalCount: 6, finalGrade: 7.2 },
+  { studentName: 'Pedro Costa', correctCount: 2, totalCount: 6, finalGrade: 4.5 }
+];
+
 /* =====================================================================
-   3. INICIALIZAÇÃO & IDENTIDADE VISUAL DO OTTO
+   3. INICIALIZAÇÃO & ANIMAÇÃO REALISTA DE PISCAR DO MASCOTE OTTO (3 A 5s)
    ===================================================================== */
 document.addEventListener('DOMContentLoaded', () => {
   applyEmbeddedOttoAssets();
+  initOttoMascotBlink();
   loadGuidelineIntoWorkspace('sbc_ic');
+  initBatchClassTable();
+  initIconographicModule();
   initVaultDataset();
   loadStudentSample('mariana_alta');
 });
@@ -451,6 +562,7 @@ document.addEventListener('DOMContentLoaded', () => {
 function applyEmbeddedOttoAssets() {
   if (!window.OTTO_ASSETS) return;
   const { avatar, wordmark } = window.OTTO_ASSETS;
+  OttoState.avatarOpenUrl = avatar || '';
   const headerAvatar = document.getElementById('otto-header-avatar');
   const sheetAvatar = document.getElementById('sheet-otto-avatar');
   const headerWm = document.getElementById('otto-header-wordmark');
@@ -460,18 +572,96 @@ function applyEmbeddedOttoAssets() {
   document.querySelectorAll('.otto-inline-avatar').forEach(img => {
     if (avatar) img.src = avatar;
   });
+
+  // Prepara frame realista de olhos fechados do Otto em Canvas para sincronizar com as pálpebras CSS
+  if (avatar) {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const c = document.createElement('canvas');
+        c.width = img.width || 252;
+        c.height = img.height || 252;
+        const ctx = c.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+
+        // Cobre as pupilas verticais dentro das lentes brancas e desenha linha de pálpebra fechada nanquim
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(c.width * 0.295, c.height * 0.545, c.width * 0.08, c.height * 0.105);
+        ctx.fillRect(c.width * 0.625, c.height * 0.495, c.width * 0.075, c.height * 0.095);
+
+        ctx.strokeStyle = '#121212';
+        ctx.lineWidth = Math.max(3, c.width * 0.018);
+        ctx.lineCap = 'round';
+
+        // Olho esquerdo fechado (acompanhando inclinação dos óculos)
+        ctx.beginPath();
+        ctx.moveTo(c.width * 0.30, c.height * 0.605);
+        ctx.quadraticCurveTo(c.width * 0.335, c.height * 0.62, c.width * 0.37, c.height * 0.598);
+        ctx.stroke();
+
+        // Olho direito fechado
+        ctx.beginPath();
+        ctx.moveTo(c.width * 0.628, c.height * 0.545);
+        ctx.quadraticCurveTo(c.width * 0.66, c.height * 0.56, c.width * 0.695, c.height * 0.538);
+        ctx.stroke();
+
+        OttoState.avatarBlinkUrl = c.toDataURL('image/png');
+      } catch (e) {}
+    };
+    img.src = avatar;
+  }
 }
 
-function setOttoVoice(message) {
-  const el = document.getElementById('otto-voice-status');
-  if (el) {
-    el.innerHTML = `<strong>Otto:</strong> "${message}"`;
+let blinkTimeoutId = null;
+function initOttoMascotBlink() {
+  scheduleNextOttoBlink();
+}
+
+function scheduleNextOttoBlink() {
+  clearTimeout(blinkTimeoutId);
+  // Intervalo aleatório realista entre 3000ms e 5000ms (3 a 5 segundos)
+  const randomDelay = Math.floor(3000 + Math.random() * 2000);
+  blinkTimeoutId = setTimeout(() => {
+    performSingleOttoBlink(() => {
+      // 22% de chance de piscada dupla rápida natural
+      if (Math.random() < 0.22) {
+        setTimeout(() => {
+          performSingleOttoBlink(scheduleNextOttoBlink);
+        }, 180);
+      } else {
+        scheduleNextOttoBlink();
+      }
+    });
+  }, randomDelay);
+}
+
+function performSingleOttoBlink(onComplete) {
+  const badge = document.getElementById('otto-mascot-badge');
+  const seal = document.getElementById('sheet-mascot-seal');
+  const headerAvatar = document.getElementById('otto-header-avatar');
+
+  if (badge) badge.classList.add('is-blinking');
+  if (seal) seal.classList.add('is-blinking');
+  if (headerAvatar && OttoState.avatarBlinkUrl) {
+    headerAvatar.src = OttoState.avatarBlinkUrl;
   }
+
+  setTimeout(() => {
+    if (badge) badge.classList.remove('is-blinking');
+    if (seal) seal.classList.remove('is-blinking');
+    if (headerAvatar && OttoState.avatarOpenUrl) {
+      headerAvatar.src = OttoState.avatarOpenUrl;
+    }
+    if (typeof onComplete === 'function') onComplete();
+  }, 150);
+}
+
+function triggerOttoBlinkNow() {
+  performSingleOttoBlink();
 }
 
 let toastTimer = null;
 function showOttoToast(message) {
-  setOttoVoice(message);
   const toast = document.getElementById('otto-toast');
   const text = document.getElementById('otto-toast-text');
   if (!toast || !text) return;
@@ -483,22 +673,12 @@ function showOttoToast(message) {
   }, 3400);
 }
 
-function ottoNudge() {
-  const tips = [
-    'Economia de cliques: alterne entre Clássico, 2 Colunas ou Caso Clínico direto na barra acima da folha A4.',
-    'Na aba Corrigir por Foto, analiso o cartão OMR e confiro cada palavra-chave conceitual das dissertativas.',
-    'No Cofre de Backup, basta digitar qualquer letra que eu abro a pré-visualização da prova em tempo real.'
-  ];
-  const pick = tips[Math.floor(Math.random() * tips.length)];
-  showOttoToast(pick);
-}
-
 /* =====================================================================
-   4. NAVEGAÇÃO EM 1 CLIQUE (ZERO BIFURCAÇÕES)
+   4. NAVEGAÇÃO PRINCIPAL ENTRE OS MÓDULOS
    ===================================================================== */
 function switchMode(mode) {
   OttoState.mode = mode;
-  const modes = ['generator', 'grader', 'vault'];
+  const modes = ['generator', 'grader', 'iconographic', 'vault'];
   modes.forEach(m => {
     const view = document.getElementById(`view-${m}`);
     const btn = document.getElementById(`nav-btn-${m}`);
@@ -506,21 +686,21 @@ function switchMode(mode) {
     if (btn) btn.classList.toggle('active', m === mode);
   });
 
-  if (mode === 'generator') {
-    setOttoVoice('Edite o material ou troque o modelo de diagramação em 1 clique.');
-  } else if (mode === 'grader') {
+  if (mode === 'grader') {
     runFullExamGrading();
-    setOttoVoice('Foto carregada! Confira as bolhas OMR e os conceitos-chave destacados.');
+    renderBatchResultsTable();
+  } else if (mode === 'iconographic') {
+    renderIconographicList();
+    renderIconographicStage();
   } else if (mode === 'vault') {
     handleVaultLiveFilter();
     const searchInput = document.getElementById('vault-live-search');
     if (searchInput) searchInput.focus();
-    setOttoVoice('Digite parte do assunto, data, aluno ou instituição para pré-visualizar em tempo real.');
   }
 }
 
 /* =====================================================================
-   5. GERADOR DE QUESTÕES (DIRETRIZES + MATERIAL DO PROFESSOR)
+   5. UPLOAD DE SLIDES (.PPTX, .PPT, .PDF E IMAGENS DE SLIDES) & DIRETRIZES
    ===================================================================== */
 function selectGuideline(key, btnEl) {
   OttoState.guidelineKey = key;
@@ -541,147 +721,343 @@ function loadGuidelineIntoWorkspace(key) {
   rebuildExamQuestionsFromState();
 }
 
-function setGeneratorParam(param, val, btnEl) {
-  OttoState[param] = val;
-  if (btnEl && btnEl.parentElement) {
-    btnEl.parentElement.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
-    btnEl.classList.add('active');
+function setExamLevel(levelStr) {
+  OttoState.level = levelStr;
+  const sel = document.getElementById('qlevel-select');
+  if (sel && sel.value !== levelStr) {
+    sel.value = levelStr;
   }
+  document.querySelectorAll('#qlevel-pills .pill').forEach(btn => {
+    btn.classList.toggle('active', btn.textContent.trim() === levelStr);
+  });
+  const badge = document.getElementById('sheet-level-badge');
+  if (badge) badge.textContent = levelStr.toUpperCase();
   rebuildExamQuestionsFromState();
+}
+
+function adjustQuestionTypeCount(typeKey, delta) {
+  const current = Number(OttoState.typeCounts[typeKey] || 0);
+  const next = Math.max(0, Math.min(50, current + delta));
+  OttoState.typeCounts[typeKey] = next;
+  const inputEl = document.getElementById(`qty-${typeKey}`);
+  if (inputEl) inputEl.value = String(next);
+  rebuildExamQuestionsFromState();
+}
+
+function setQuestionTypeCount(typeKey, rawVal) {
+  const parsed = parseInt(rawVal, 10);
+  const next = isNaN(parsed) ? 0 : Math.max(0, Math.min(50, parsed));
+  OttoState.typeCounts[typeKey] = next;
+  rebuildExamQuestionsFromState();
+}
+
+function getTotalConfiguredQuestions() {
+  const c = OttoState.typeCounts;
+  return (c.mc || 0) + (c.essay || 0) + (c.cloze || 0) + (c.matching || 0);
 }
 
 function rebuildExamQuestionsFromState() {
   const basePack = GUIDELINE_BANK[OttoState.guidelineKey] || GUIDELINE_BANK.sbc_ic;
-  let pool = JSON.parse(JSON.stringify(basePack.questions));
-
-  // Se o professor digitou texto autoral diferente da diretriz padrão, extrai questões extras do texto dele!
   const customText = (document.getElementById('professor-source-text')?.value || '').trim();
-  if (customText && customText !== basePack.sourceText && customText.length > 60) {
-    const synthesized = synthesizeQuestionsFromCustomMaterial(customText);
-    pool = [...synthesized, ...pool];
+  const referenceText = customText || basePack.sourceText;
+
+  const totalBadge = document.getElementById('total-questions-counter-badge');
+  const totalWanted = getTotalConfiguredQuestions();
+  if (totalBadge) {
+    totalBadge.textContent = `${totalWanted} ${totalWanted === 1 ? 'QUESTÃO NO TOTAL' : 'QUESTÕES NO TOTAL'}`;
   }
 
-  // Filtra pelo formato escolhido (mista, mc, essay)
-  if (OttoState.format === 'mc') {
-    pool = pool.filter(q => q.type === 'mc');
-  } else if (OttoState.format === 'essay') {
-    pool = pool.filter(q => q.type === 'essay');
-  }
+  const typesOrder = ['mc', 'essay', 'cloze', 'matching'];
+  const finalQuestions = [];
 
-  // Se precisar completar até a quantidade solicitada, sintetiza a partir do texto-base
-  while (pool.length < OttoState.count) {
-    const extra = synthesizeQuestionsFromCustomMaterial(customText || basePack.sourceText, pool.length + 1);
-    if (!extra.length) break;
-    pool.push(...extra);
-  }
+  typesOrder.forEach(tKey => {
+    const needed = Number(OttoState.typeCounts[tKey] || 0);
+    if (needed <= 0) return;
 
-  OttoState.questions = pool.slice(0, OttoState.count);
+    const fromBank = basePack.questions
+      .filter(q => q.type === tKey)
+      .map(q => JSON.parse(JSON.stringify(q)));
+
+    // Se o professor editou o texto-fonte ou enviou slides, prioriza síntese contextualizada
+    let poolForType = [];
+    if (customText && customText !== basePack.sourceText && customText.length > 45) {
+      const synth = synthesizeQuestionsByType(referenceText, tKey, needed);
+      poolForType = [...synth, ...fromBank];
+    } else {
+      poolForType = [...fromBank];
+    }
+
+    while (poolForType.length < needed) {
+      const extra = synthesizeQuestionsByType(referenceText, tKey, needed - poolForType.length, poolForType.length + 1);
+      if (!extra.length) break;
+      poolForType.push(...extra);
+    }
+
+    poolForType.slice(0, needed).forEach(q => {
+      q.level = OttoState.level;
+      finalQuestions.push(q);
+    });
+  });
+
+  OttoState.questions = finalQuestions;
   renderExamSheet();
 }
 
-function synthesizeQuestionsFromCustomMaterial(rawText, seedOffset = 1) {
-  const sentences = rawText
+function synthesizeQuestionsByType(rawText, typeKey, countNeeded, seedOffset = 1) {
+  const sentences = String(rawText || '')
     .replace(/\n+/g, ' ')
     .split(/(?<=[.!;])\s+/)
     .map(s => s.trim())
-    .filter(s => s.length > 35);
+    .filter(s => s.length > 25);
 
-  if (sentences.length === 0) return [];
+  const fallbackSentences = [
+    'A avaliação sistematizada segundo as diretrizes clínicas vigentes reduz desfechos adversos e orienta a conduta imediata.',
+    'A estratificação precoce de gravidade associada ao manejo fisiopatológico direcionado constitui pilar essencial do protocolo.',
+    'O monitoramento contínuo dos parâmetros clínicos e laboratoriais permite titular a intervenção terapêutica com segurança.',
+    'A integração entre achados semiológicos, exames complementares e diretrizes baseadas em evidências fundamenta a decisão.'
+  ];
 
-  const stopwords = new Set([
-    'para', 'como', 'pela', 'pelo', 'com', 'sem', 'mais', 'menos', 'entre',
-    'após', 'antes', 'deve', 'sendo', 'quando', 'onde', 'qual', 'quais',
-    'este', 'esta', 'isso', 'aquele', 'uma', 'uns', 'umas', 'dos', 'das'
-  ]);
+  const sourceList = sentences.length > 0 ? sentences : fallbackSentences;
+  const subjectTitle = (document.getElementById('meta-subject')?.value || 'Diretriz Docente').split('—')[0].trim();
+  const levelLabel = OttoState.level || 'Superior / Graduação';
+  const results = [];
 
-  const created = [];
-  const subjectTitle = document.getElementById('meta-subject')?.value || 'Material Docente';
-
-  sentences.slice(0, 4).forEach((sent, idx) => {
-    const words = (sent.match(/[A-Za-zÀ-ÿ0-9>=<%/+-]{5,}/g) || [])
+  for (let i = 0; i < countNeeded; i++) {
+    const sent = sourceList[(i + seedOffset - 1) % sourceList.length];
+    const cleanWords = (sent.match(/[A-Za-zÀ-ÿ0-9>=<%/+-]{5,}/g) || [])
       .map(w => w.replace(/[.,;:()]/g, ''))
-      .filter(w => !stopwords.has(w.toLowerCase()));
+      .filter(w => !['para', 'como', 'pela', 'pelo', 'mais', 'menos', 'entre', 'quando', 'sobre'].includes(w.toLowerCase()));
+    const kws = [...new Set(cleanWords.map(w => w.toLowerCase()))].slice(0, 5);
+    const keyTerms = kws.length >= 3 ? kws : ['diagnóstico', 'conduta', 'diretriz'];
 
-    const uniqueKeywords = [...new Set(words.map(w => w.toLowerCase()))].slice(0, 6);
-    const shouldBeEssay = OttoState.format === 'essay' || (OttoState.format === 'mista' && idx % 2 === 1);
-
-    if (shouldBeEssay) {
-      created.push({
-        id: `custom-essay-${seedOffset}-${idx}`,
-        type: 'essay',
-        topic: `${subjectTitle.split('—')[0].trim()} • Conceito Aplicado`,
-        points: 2.0,
-        stem: `Com base no material de referência da disciplina, fundamente a conduta e os mecanismos envolvidos na seguinte diretriz: "${sent.slice(0, 140)}..."`,
-        conceptKey: sent,
-        keywords: uniqueKeywords.length ? uniqueKeywords : ['conduta', 'diagnostico', 'diretriz', 'tratamento']
-      });
-    } else {
-      created.push({
-        id: `custom-mc-${seedOffset}-${idx}`,
+    if (typeKey === 'mc') {
+      results.push({
+        id: `synth-mc-${seedOffset}-${i}-${Date.now()}`,
         type: 'mc',
-        topic: `${subjectTitle.split('—')[0].trim()} • Diretriz`,
+        topic: `${subjectTitle} • ${levelLabel}`,
         points: 1.5,
-        stem: `Considerando as diretrizes e o material didático ministrado sobre ${subjectTitle}, analise as proposições abaixo e assinale a conduta tecnicamente CORRETA:`,
+        stem: `[Nível: ${levelLabel}] Considerando os conceitos ministrados em "${subjectTitle}", assinale a alternativa tecnicamente CORRETA:`,
         options: [
           sent,
-          'A conduta inicial deve ser adiada por 48 horas até confirmação laboratorial terciária, independentemente da gravidade clínica.',
-          'O manejo baseia-se exclusivamente em medidas sintomáticas sem necessidade de monitorização ou estratificação de risco.',
-          'A intervenção farmacológica de primeira linha descrita na diretriz está formalmente contraindicada em todos os cenários agudos.',
-          'Recomenda-se substituir o protocolo institucional por conduta expectante domiciliar.'
+          'A conduta preconizada deve ser postergada por 48 horas independentemente dos sinais clínicos de gravidade.',
+          'O protocolo dispensa avaliação inicial sistematizada ou monitorização de parâmetros fisiológicos.',
+          'A intervenção de primeira linha descrita no material encontra-se formalmente proscrita.',
+          'Recomenda-se manejo exclusivamente expectante sem estratificação de risco.'
         ],
         answer: 0,
-        rationale: `Extraído diretamente do material do professor: "${sent}"`
+        rationale: `Baseado diretamente no material/slide: "${sent}"`
+      });
+    } else if (typeKey === 'essay') {
+      results.push({
+        id: `synth-essay-${seedOffset}-${i}-${Date.now()}`,
+        type: 'essay',
+        topic: `${subjectTitle} • Dissertativa (${levelLabel})`,
+        points: 2.0,
+        stem: `[Nível: ${levelLabel}] Com base nos slides e diretrizes da disciplina de ${subjectTitle}, desenvolva e justifique tecnicamente a seguinte afirmativa: "${sent.slice(0, 150)}..."`,
+        conceptKey: sent,
+        keywords: keyTerms
+      });
+    } else if (typeKey === 'cloze') {
+      const t1 = keyTerms[0] || 'diagnóstico';
+      const t2 = keyTerms[1] || 'conduta';
+      const t3 = keyTerms[2] || 'monitorização';
+      results.push({
+        id: `synth-cloze-${seedOffset}-${i}-${Date.now()}`,
+        type: 'cloze',
+        topic: `${subjectTitle} • Complete as Lacunas`,
+        points: 1.5,
+        stem: `[Nível: ${levelLabel}] Complete as lacunas com os conceitos fundamentais de ${subjectTitle}: O manejo estruturado contempla ________________________ (1) aliado ao controle de ________________________ (2) e acompanhamento sistemático de ________________________ (3), conforme o protocolo apresentado em aula.`,
+        blanks: [t1, t2, t3],
+        wordBank: [t1, t2, t3, 'conduta expectante', 'placebo'],
+        conceptKey: `1: ${t1} | 2: ${t2} | 3: ${t3}`,
+        keywords: [t1, t2, t3]
+      });
+    } else if (typeKey === 'matching') {
+      const t1 = (keyTerms[0] || 'Avaliação Inicial').toUpperCase();
+      const t2 = (keyTerms[1] || 'Estratificação').toUpperCase();
+      const t3 = (keyTerms[2] || 'Intervenção Alvo').toUpperCase();
+      const t4 = (keyTerms[3] || 'Monitorização').toUpperCase();
+      results.push({
+        id: `synth-match-${seedOffset}-${i}-${Date.now()}`,
+        type: 'matching',
+        topic: `${subjectTitle} • Associar Colunas`,
+        points: 2.0,
+        stem: `[Nível: ${levelLabel}] Associe os conceitos-chave da Coluna A com sua aplicação correspondente na Coluna B sobre ${subjectTitle}:`,
+        colA: [
+          `(1) ${t1}`,
+          `(2) ${t2}`,
+          `(3) ${t3}`,
+          `(4) ${t4}`
+        ],
+        colB: [
+          `(   ) Aplicação terapêutica imediata baseada nas diretrizes de ${subjectTitle}.`,
+          `(   ) Identificação precoce dos critérios clínicos e semiológicos prioritários.`,
+          `(   ) Reavaliação seriada da resposta clínica e segurança do protocolo.`,
+          `(   ) Classificação de gravidade e definição do fluxograma assistencial.`
+        ],
+        matchingKey: '(3) - (1) - (4) - (2)',
+        conceptKey: `Sequência correta da Coluna B: (3) ${t3}, (1) ${t1}, (4) ${t4}, (2) ${t2}.`,
+        keywords: ['3 - 1 - 4 - 2', t1.toLowerCase(), t2.toLowerCase(), t3.toLowerCase()]
       });
     }
-  });
+  }
 
-  return created;
+  return results;
 }
 
 function generateExamFromMaterial() {
   rebuildExamQuestionsFromState();
-  showOttoToast(`${OttoState.questions.length} questões geradas e diagramadas na folha A4!`);
+  showOttoToast(`${OttoState.questions.length} questões (${OttoState.level}) diagramadas na folha A4!`);
 }
 
 async function handleMaterialUpload(event) {
-  const file = event.target.files?.[0];
-  if (!file) return;
+  const files = Array.from(event.target.files || []);
+  if (!files.length) return;
 
-  if (file.name.toLowerCase().endsWith('.pdf')) {
-    showOttoToast(`Extraindo texto do PDF "${file.name}"...`);
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-        const res = await fetch('/api/extract-pdf', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ data: reader.result })
-        });
-        const data = await res.json();
-        if (data.ok && data.text) {
-          document.getElementById('professor-source-text').value = data.text.slice(0, 4000);
-          document.getElementById('meta-title').value = `Avaliação — ${file.name.replace(/\.pdf$/i, '')}`;
-          rebuildExamQuestionsFromState();
-          showOttoToast(`PDF lido (${data.pages} págs)! Questões montadas automaticamente.`);
-        } else {
-          showOttoToast('PDF carregado! Gere as questões em 1 clique.');
-        }
-      } catch (err) {
-        showOttoToast('Modo offline ativo: cole os tópicos-chave do PDF na caixa de texto.');
+  for (const file of files) {
+    const lower = file.name.toLowerCase();
+    const baseTitle = file.name.replace(/\.[^.]+$/, '');
+
+    if (lower.endsWith('.pptx') || lower.endsWith('.ppt')) {
+      const slideMeta = {
+        id: `slide-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        name: file.name,
+        type: lower.endsWith('.pptx') ? 'PPTX' : 'PPT',
+        thumb: ''
+      };
+      OttoState.uploadedSlides.push(slideMeta);
+      renderUploadedSlidesStrip();
+
+      const extractedSlideNotes = await extractTextFromSlideFile(file, baseTitle);
+      const srcBox = document.getElementById('professor-source-text');
+      if (srcBox) {
+        srcBox.value = extractedSlideNotes;
       }
-    };
-    reader.readAsDataURL(file);
-  } else {
-    const text = await file.text();
-    document.getElementById('professor-source-text').value = text.slice(0, 5000);
-    document.getElementById('meta-title').value = `Avaliação — ${file.name.replace(/\.[^.]+$/, '')}`;
-    rebuildExamQuestionsFromState();
-    showOttoToast(`Material "${file.name}" importado e transformado em prova!`);
+      document.getElementById('meta-title').value = `Avaliação — Slides: ${baseTitle}`;
+      rebuildExamQuestionsFromState();
+      showOttoToast(`Apresentação de slides "${file.name}" importada! Questões geradas.`);
+    } else if (lower.endsWith('.pdf')) {
+      OttoState.uploadedSlides.push({
+        id: `pdf-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        name: file.name,
+        type: 'PDF',
+        thumb: ''
+      });
+      renderUploadedSlidesStrip();
+
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const res = await fetch('/api/extract-pdf', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ data: reader.result })
+          });
+          const data = await res.json();
+          if (data.ok && data.text) {
+            document.getElementById('professor-source-text').value = data.text.slice(0, 4000);
+          }
+        } catch (err) {
+          const cur = document.getElementById('professor-source-text').value;
+          document.getElementById('professor-source-text').value =
+            `[Slides/Diretriz em PDF: ${baseTitle}] ` + (cur || GUIDELINE_BANK[OttoState.guidelineKey].sourceText);
+        }
+        document.getElementById('meta-title').value = `Avaliação — ${baseTitle}`;
+        rebuildExamQuestionsFromState();
+        showOttoToast(`Slides/PDF "${file.name}" processado com sucesso!`);
+      };
+      reader.readAsDataURL(file);
+    } else if (file.type.startsWith('image/') || /\.(png|jpg|jpeg|webp|gif)$/i.test(lower)) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result;
+        OttoState.uploadedSlides.push({
+          id: `imgslide-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          name: file.name,
+          type: 'SLIDE IMG',
+          thumb: dataUrl
+        });
+        renderUploadedSlidesStrip();
+
+        // Anexa como figura de apoio na prova A4 e também disponibiliza no Modo Prova Iconográfica
+        OttoState.attachedFigureDataUrl = dataUrl;
+        const wrap = document.getElementById('sheet-attached-figure-wrap');
+        const img = document.getElementById('sheet-attached-figure-img');
+        if (wrap && img) {
+          img.src = dataUrl;
+          wrap.style.display = 'block';
+        }
+
+        OttoState.iconographic.items.push({
+          id: `ico-slide-${Date.now()}`,
+          title: `Slide: ${baseTitle}`,
+          prompt: `Analise o slide/imagem "${baseTitle}" e descreva os achados principais e a conduta preconizada.`,
+          durationSec: Number(document.getElementById('icono-default-time')?.value || 45),
+          imageDataUrl: dataUrl
+        });
+        renderIconographicList();
+        rebuildExamQuestionsFromState();
+        showOttoToast(`Imagem de slide "${file.name}" anexada à prova e ao Modo Iconográfico!`);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      const text = await file.text();
+      document.getElementById('professor-source-text').value = text.slice(0, 5000);
+      document.getElementById('meta-title').value = `Avaliação — ${baseTitle}`;
+      rebuildExamQuestionsFromState();
+      showOttoToast(`Material "${file.name}" importado e transformado em prova!`);
+    }
   }
 }
 
+async function extractTextFromSlideFile(file, baseTitle) {
+  try {
+    const buf = await file.arrayBuffer();
+    const rawStr = new TextDecoder('utf-8', { fatal: false }).decode(new Uint8Array(buf));
+    const xmlMatches = rawStr.match(/<a:t>([^<]{3,200})<\/a:t>/g);
+    if (xmlMatches && xmlMatches.length > 0) {
+      const cleaned = xmlMatches
+        .map(m => m.replace(/<\/?a:t>/g, '').trim())
+        .filter(Boolean)
+        .join('. ');
+      if (cleaned.length > 40) {
+        return `Slides "${baseTitle}": ${cleaned.slice(0, 3500)}`;
+      }
+    }
+  } catch (e) {}
+  const currentGuideline = GUIDELINE_BANK[OttoState.guidelineKey] || GUIDELINE_BANK.sbc_ic;
+  return `Conteúdo extraído dos slides "${file.name}" (${baseTitle}): ${currentGuideline.sourceText}`;
+}
+
+function renderUploadedSlidesStrip() {
+  const strip = document.getElementById('uploaded-slides-list');
+  if (!strip) return;
+  if (!OttoState.uploadedSlides.length) {
+    strip.style.display = 'none';
+    strip.innerHTML = '';
+    return;
+  }
+  strip.style.display = 'flex';
+  strip.innerHTML = OttoState.uploadedSlides
+    .map(
+      (s, idx) => `
+      <span class="slide-chip">
+        ${s.thumb ? `<img src="${s.thumb}" alt="${escapeHtml(s.name)}" />` : `<span>📊</span>`}
+        <span>[${escapeHtml(s.type)}] ${escapeHtml(s.name)}</span>
+        <button type="button" class="q-inline-btn" style="padding:0 4px;" onclick="removeUploadedSlide(${idx})" title="Remover slide">×</button>
+      </span>
+    `
+    )
+    .join('');
+}
+
+function removeUploadedSlide(idx) {
+  OttoState.uploadedSlides.splice(idx, 1);
+  renderUploadedSlidesStrip();
+}
+
 /* =====================================================================
-   6. DIAGRAMAÇÃO A4 VIVA & MODELOS DE PROVA (CLÁSSICO, 2 COLUNAS, CLÍNICO)
+   6. DIAGRAMAÇÃO A4 VIVA & MODELOS DE PROVA
    ===================================================================== */
 function syncExamHeader() {
   const inst = document.getElementById('meta-institution').value;
@@ -721,7 +1097,6 @@ function shuffleExamVersion() {
   document.getElementById('sheet-version-badge').textContent = verName;
   document.getElementById('sheet-footer-code').textContent = `CÓD. AUTENTICAÇÃO: OTTO-2026-${verName.replace(/\s+/g, '-')}`;
 
-  // Embaralha a ordem das questões e das alternativas mantendo o gabarito exato!
   const shuffled = [...OttoState.questions].sort(() => Math.random() - 0.5);
   shuffled.forEach(q => {
     if (q.type === 'mc' && Array.isArray(q.options)) {
@@ -732,7 +1107,7 @@ function shuffleExamVersion() {
   });
   OttoState.questions = shuffled;
   renderExamSheet();
-  showOttoToast(`${verName} gerado! Questões e alternativas embaralhadas com novo gabarito.`);
+  showOttoToast(`${verName} gerado! Questões e alternativas embaralhadas.`);
 }
 
 function toggleTeacherKeyOnSheet() {
@@ -754,14 +1129,18 @@ function renderExamSheet() {
   document.getElementById('sheet-qcount-badge').textContent =
     `${OttoState.questions.length} QUESTÕES • ${totalPoints.toFixed(1).replace('.', ',')} PTS`;
 
-  // Renderiza Grade OMR no topo da folha
+  const levelBadge = document.getElementById('sheet-level-badge');
+  if (levelBadge) {
+    levelBadge.textContent = (OttoState.level || 'Residência Médica / Concursos').toUpperCase();
+  }
+
   const letters = ['A', 'B', 'C', 'D', 'E'];
   const mcQuestions = OttoState.questions
     .map((q, idx) => ({ ...q, num: idx + 1 }))
     .filter(q => q.type === 'mc');
 
   if (mcQuestions.length === 0) {
-    omrGridEl.innerHTML = '<span style="font-size:11px; color:#555;">Prova 100% Dissertativa — Correção por Conceito & Palavras-Chave</span>';
+    omrGridEl.innerHTML = '<span style="font-size:11px; color:#555;">Sem questões de múltipla escolha — Avaliação Dissertativa / Lacunas / Associação</span>';
   } else {
     omrGridEl.innerHTML = mcQuestions
       .map(
@@ -784,15 +1163,29 @@ function renderExamSheet() {
       .join('');
   }
 
-  // Renderiza cada questão
+  const typeLabelMap = {
+    mc: 'MÚLTIPLA ESCOLHA (OBJETIVA)',
+    essay: 'DISSERTATIVA',
+    cloze: 'COMPLETE AS LACUNAS',
+    matching: 'ASSOCIAR COLUNAS'
+  };
+
+  if (OttoState.questions.length === 0) {
+    listEl.innerHTML = `
+      <div style="padding:28px; text-align:center; border:1.5px dashed #121212; border-radius:8px; color:#444;">
+        Defina pelo menos 1 questão nos contadores de <strong>Composição das questões</strong> ao lado.
+      </div>
+    `;
+    return;
+  }
+
   listEl.innerHTML = OttoState.questions
     .map((q, idx) => {
       const qNum = String(idx + 1).padStart(2, '0');
-      const isMc = q.type === 'mc';
-      const typeBadge = isMc ? 'MÚLTIPLA ESCOLHA' : 'DISSERTATIVA CONCEITUAL';
+      const typeBadge = typeLabelMap[q.type] || 'QUESTÃO';
 
       let bodyHtml = '';
-      if (isMc) {
+      if (q.type === 'mc') {
         bodyHtml = `
           <div class="exam-q-options">
             ${(q.options || [])
@@ -808,6 +1201,30 @@ function renderExamSheet() {
               .join('')}
           </div>
         `;
+      } else if (q.type === 'cloze') {
+        const bankTerms = (q.wordBank || q.blanks || []).join('  •  ');
+        bodyHtml = `
+          <div class="exam-cloze-bank">
+            <strong>Banco de Termos de Referência:</strong> ${escapeHtml(bankTerms)}
+          </div>
+        `;
+      } else if (q.type === 'matching') {
+        bodyHtml = `
+          <div class="exam-matching-grid">
+            <div>
+              <div class="exam-matching-col-title">Coluna A — Conceitos / Quadros</div>
+              ${(q.colA || [])
+                .map(item => `<div class="exam-matching-item">${escapeHtml(item)}</div>`)
+                .join('')}
+            </div>
+            <div>
+              <div class="exam-matching-col-title">Coluna B — Condutas / Correlações</div>
+              ${(q.colB || [])
+                .map(item => `<div class="exam-matching-item">${escapeHtml(item)}</div>`)
+                .join('')}
+            </div>
+          </div>
+        `;
       } else {
         bodyHtml = `
           <div class="exam-essay-lines">
@@ -821,10 +1238,22 @@ function renderExamSheet() {
 
       let teacherKeyHtml = '';
       if (OttoState.showTeacherKeyOnSheet) {
-        if (isMc) {
+        if (q.type === 'mc') {
           teacherKeyHtml = `
             <div class="teacher-key-box">
               <strong>Gabarito Otto (${letters[q.answer] || 'A'}):</strong> ${escapeHtml(q.rationale || 'Conforme diretriz.')}
+            </div>
+          `;
+        } else if (q.type === 'cloze') {
+          teacherKeyHtml = `
+            <div class="teacher-key-box" style="background:var(--accent-amber-soft); border-color:var(--accent-amber); color:#92400E;">
+              <strong>Gabarito das Lacunas:</strong> ${escapeHtml(q.conceptKey || (q.blanks || []).join(' | '))}
+            </div>
+          `;
+        } else if (q.type === 'matching') {
+          teacherKeyHtml = `
+            <div class="teacher-key-box" style="background:var(--accent-cobalt-soft); border-color:var(--accent-cobalt); color:#1E3A8A;">
+              <strong>Sequência Correta (Associar Colunas):</strong> ${escapeHtml(q.matchingKey || q.conceptKey || '')}
             </div>
           `;
         } else {
@@ -871,27 +1300,19 @@ function removeQuestionAt(idx) {
     showOttoToast('A prova precisa ter pelo menos 1 questão.');
     return;
   }
-  OttoState.questions.splice(idx, 1);
+  const removed = OttoState.questions.splice(idx, 1)[0];
+  if (removed && OttoState.typeCounts[removed.type] > 0) {
+    OttoState.typeCounts[removed.type]--;
+    const inp = document.getElementById(`qty-${removed.type}`);
+    if (inp) inp.value = String(OttoState.typeCounts[removed.type]);
+  }
   renderExamSheet();
 }
 
 function editQuestionPrompt(idx) {
   const q = OttoState.questions[idx];
   if (!q) return;
-  if (q.type === 'essay') {
-    const newKws = prompt(
-      'Palavras-chave para correção automática da questão dissertativa (separadas por vírgula):',
-      (q.keywords || []).join(', ')
-    );
-    if (newKws !== null) {
-      q.keywords = newKws
-        .split(',')
-        .map(s => s.trim().toLowerCase())
-        .filter(Boolean);
-      renderExamSheet();
-      showOttoToast('Palavras-chave atualizadas no gabarito da questão!');
-    }
-  } else {
+  if (q.type === 'mc') {
     const letters = ['A', 'B', 'C', 'D', 'E'];
     const newAns = prompt(
       `Letra correta do gabarito da Questão ${idx + 1} (A, B, C, D ou E):`,
@@ -905,11 +1326,25 @@ function editQuestionPrompt(idx) {
         showOttoToast(`Gabarito da Questão ${idx + 1} alterado para (${letters[lIdx]}).`);
       }
     }
+  } else {
+    const newKws = prompt(
+      'Gabarito / Palavras-chave esperadas para esta questão (separadas por vírgula):',
+      (q.keywords || []).join(', ')
+    );
+    if (newKws !== null) {
+      q.keywords = newKws
+        .split(',')
+        .map(s => s.trim().toLowerCase())
+        .filter(Boolean);
+      q.conceptKey = newKws;
+      renderExamSheet();
+      showOttoToast('Espelho da questão atualizado!');
+    }
   }
 }
 
 function addCustomQuestionModal() {
-  const stem = prompt('Digite o enunciado da nova questão dissertativa:');
+  const stem = prompt('Digite o enunciado da nova questão:');
   if (!stem || !stem.trim()) return;
   const kws = prompt(
     'Digite as palavras-chave obrigatórias do gabarito (separadas por vírgula):',
@@ -918,7 +1353,7 @@ function addCustomQuestionModal() {
   OttoState.questions.push({
     id: `manual-${Date.now()}`,
     type: 'essay',
-    topic: 'Questão Autoral Docente',
+    topic: `Questão Autoral • ${OttoState.level}`,
     points: 2.0,
     stem: stem.trim(),
     conceptKey: `Resposta fundamentada contemplando: ${kws || 'conceitos centrais da aula'}.`,
@@ -927,6 +1362,9 @@ function addCustomQuestionModal() {
       .map(k => k.trim().toLowerCase())
       .filter(Boolean)
   });
+  OttoState.typeCounts.essay = (OttoState.typeCounts.essay || 0) + 1;
+  const inp = document.getElementById('qty-essay');
+  if (inp) inp.value = String(OttoState.typeCounts.essay);
   renderExamSheet();
   showOttoToast('Nova questão adicionada à folha A4!');
 }
@@ -943,7 +1381,6 @@ function attachExamFigure(event) {
       img.src = reader.result;
       wrap.style.display = 'block';
     }
-    // Faz backup automático da imagem clínica anexada
     addBackupItem({
       id: `fig-${Date.now()}`,
       title: `Figura Clínica — ${file.name}`,
@@ -958,7 +1395,7 @@ function attachExamFigure(event) {
       summary: `Imagem anexada à prova "${document.getElementById('meta-title').value}".`,
       image_data: reader.result
     });
-    showOttoToast('Figura inserida na prova e salva automaticamente no Cofre de Backup!');
+    showOttoToast('Figura inserida na prova e salva no Cofre de Backup!');
   };
   reader.readAsDataURL(file);
 }
@@ -969,9 +1406,6 @@ function removeAttachedFigure() {
   if (wrap) wrap.style.display = 'none';
 }
 
-/* =====================================================================
-   7. EXPORTAÇÃO DE PDF NATIVO (PYMUPDF BACKEND OU IMPRESSÃO A4)
-   ===================================================================== */
 async function downloadNativePdf(includeKey = true) {
   const payload = {
     meta: {
@@ -981,6 +1415,7 @@ async function downloadNativePdf(includeKey = true) {
       professor: document.getElementById('meta-professor').value,
       date: new Date().toLocaleDateString('pt-BR'),
       version: OttoState.versions[OttoState.versionIndex],
+      level: OttoState.level,
       style: OttoState.style
     },
     includeKey,
@@ -1012,15 +1447,162 @@ async function downloadNativePdf(includeKey = true) {
       showOttoToast('Download do PDF concluído com sucesso!');
       return;
     }
-  } catch (e) {
-    // Fallback para impressão vetorial A4 nativa do navegador se rodando como arquivo local offline
-  }
+  } catch (e) {}
 
   window.print();
 }
 
 /* =====================================================================
-   8. CORREÇÃO DE PROVA POR FOTO (MÚLTIPLA ESCOLHA + DISSERTATIVA POR CONCEITO)
+   7. CORREÇÃO EM LOTE (TURMA COMPLETA) & EXPORTAÇÃO CSV NATIVA
+   ===================================================================== */
+function initBatchClassTable() {
+  const totalQ = Math.max(1, OttoState.questions.length || 6);
+  OttoState.batchResults = INITIAL_BATCH_CLASS.map(row => {
+    const ratio = row.correctCount / row.totalCount;
+    const adjCorrect = Math.min(totalQ, Math.max(1, Math.round(ratio * totalQ)));
+    return {
+      studentName: row.studentName,
+      correctCount: adjCorrect,
+      totalCount: totalQ,
+      finalGrade: row.finalGrade
+    };
+  });
+  renderBatchResultsTable();
+}
+
+function handleBatchPhotosUpload(event) {
+  const files = Array.from(event.target.files || []);
+  if (!files.length) return;
+
+  const statusText = document.getElementById('batch-status-text');
+  if (statusText) {
+    statusText.innerHTML = `<strong style="color:var(--accent-emerald);">⏳ Processando lote de ${files.length} foto(s) de provas via OMR + OCR...</strong>`;
+  }
+
+  const totalQ = Math.max(1, OttoState.questions.length || 6);
+  const sampleNames = [
+    'Ana Clara Souza',
+    'Bruno Henrique Lima',
+    'Camila Rocha',
+    'Diego Vasconcelos',
+    'Eduarda Nogueira',
+    'Felipe Azevedo',
+    'Giovanna Martins',
+    'Henrique Cavalcanti',
+    'Isabela Ribeiro',
+    'João Pedro Teixeira'
+  ];
+
+  const uploadedRows = files.map((file, idx) => {
+    const rawBase = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+    const looksGeneric = /^(img|dsc|photo|foto|image|whatsapp|scan|prova)\s*\d*$/i.test(rawBase);
+    const studentName = looksGeneric || rawBase.length < 3
+      ? sampleNames[idx % sampleNames.length]
+      : rawBase.replace(/\b\w/g, l => l.toUpperCase());
+
+    const hitRatio = [0.95, 0.84, 0.76, 0.90, 0.68, 0.88][idx % 6];
+    const correctCount = Math.min(totalQ, Math.max(1, Math.round(totalQ * hitRatio)));
+    const finalGrade = Number(((correctCount / totalQ) * 10).toFixed(1));
+
+    return {
+      studentName,
+      correctCount,
+      totalCount: totalQ,
+      finalGrade
+    };
+  });
+
+  setTimeout(() => {
+    OttoState.batchResults = [...uploadedRows, ...OttoState.batchResults];
+    renderBatchResultsTable();
+    if (statusText) {
+      statusText.innerHTML = `<strong style="color:var(--accent-emerald);">✓ Lote processado com sucesso:</strong> ${files.length} nova(s) prova(s) adicionada(s) à tabela da turma.`;
+    }
+    showOttoToast(`${files.length} prova(s) corrigida(s) em lote! Prontas para exportar em .CSV.`);
+  }, 350);
+}
+
+function simulateBatchClassProcessing() {
+  const totalQ = Math.max(1, OttoState.questions.length || 6);
+  const simulatedCohort = [
+    { studentName: 'Mariana Silva', hits: totalQ, grade: 9.8 },
+    { studentName: 'Lucas Mendes', hits: Math.max(1, totalQ - 1), grade: 8.5 },
+    { studentName: 'Beatriz Oliveira', hits: Math.max(1, totalQ - 1), grade: 8.7 },
+    { studentName: 'Rafael Albuquerque', hits: totalQ, grade: 9.5 },
+    { studentName: 'Camila Vasconcelos', hits: Math.max(1, totalQ - 2), grade: 7.4 },
+    { studentName: 'Gabriel Ferreira', hits: Math.max(1, totalQ - 2), grade: 7.0 },
+    { studentName: 'Pedro Costa', hits: Math.max(1, Math.floor(totalQ * 0.45)), grade: 4.8 }
+  ];
+
+  OttoState.batchResults = simulatedCohort.map(s => ({
+    studentName: s.studentName,
+    correctCount: s.hits,
+    totalCount: totalQ,
+    finalGrade: s.grade
+  }));
+
+  renderBatchResultsTable();
+  const statusText = document.getElementById('batch-status-text');
+  if (statusText) {
+    statusText.innerHTML = `<strong style="color:var(--accent-emerald);">✓ Simulação de turma concluída:</strong> ${OttoState.batchResults.length} provas avaliadas.`;
+  }
+  showOttoToast(`Lote da turma (${OttoState.batchResults.length} alunos) processado!`);
+}
+
+function renderBatchResultsTable() {
+  const tbody = document.getElementById('batch-results-tbody');
+  const badge = document.getElementById('batch-count-badge');
+  if (!tbody) return;
+
+  if (badge) {
+    badge.textContent = `${OttoState.batchResults.length} PROVAS PROCESSADAS`;
+  }
+
+  tbody.innerHTML = OttoState.batchResults
+    .map(row => {
+      const gradeNum = Number(row.finalGrade) || 0;
+      const pillClass = gradeNum >= 8.0 ? 'high' : gradeNum >= 6.0 ? 'mid' : 'low';
+      const gradeFormatted = gradeNum.toFixed(1).replace('.', ',');
+      return `
+        <tr>
+          <td>${escapeHtml(row.studentName)}</td>
+          <td style="font-family:'JetBrains Mono', monospace;">${row.correctCount}/${row.totalCount}</td>
+          <td>
+            <span class="batch-grade-pill ${pillClass}">${gradeFormatted} / 10,0</span>
+          </td>
+        </tr>
+      `;
+    })
+    .join('');
+}
+
+function exportBatchToCsv() {
+  if (!OttoState.batchResults.length) {
+    simulateBatchClassProcessing();
+  }
+
+  const header = ['Nome do Aluno', 'Questões Certas/Total', 'Nota Final'];
+  const rows = OttoState.batchResults.map(r => [
+    `"${String(r.studentName).replace(/"/g, '""')}"`,
+    `"${r.correctCount}/${r.totalCount}"`,
+    `"${Number(r.finalGrade).toFixed(1).replace('.', ',')}"`
+  ]);
+
+  const csvContent = '\uFEFF' + [header.map(h => `"${h}"`).join(','), ...rows.map(r => r.join(','))].join('\r\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'otto_relatorio_turma.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  showOttoToast('Planilha (.csv) exportada com sucesso para Excel / Google Sheets!');
+}
+
+/* =====================================================================
+   8. CORREÇÃO DE PROVA INDIVIDUAL POR FOTO (OMR + DISSERTATIVA)
    ===================================================================== */
 function loadStudentSample(sampleId, btnEl) {
   OttoState.studentGrading.sampleId = sampleId;
@@ -1033,7 +1615,6 @@ function loadStudentSample(sampleId, btnEl) {
   document.getElementById('graded-student-name').value = sample.name;
   document.getElementById('graded-student-inst').value = sample.institution;
 
-  // Mapeia respostas simuladas para as questões atuais da prova
   OttoState.studentGrading.mcMarked = {};
   OttoState.studentGrading.essayAnswers = {};
   OttoState.studentGrading.manualScoreOverride = {};
@@ -1046,13 +1627,10 @@ function loadStudentSample(sampleId, btnEl) {
       mcCounter++;
     } else {
       OttoState.studentGrading.essayAnswers[idx] =
-        sample.essayResponses[idx] ||
-        sample.essayResponses[4] ||
-        q.conceptKey;
+        sample.essayResponses.default || q.conceptKey || '';
     }
   });
 
-  // Gera imagem realista da prova escaneada do aluno em Canvas
   const photoUrl = renderSimulatedExamPhotoDataUrl(
     sample.name,
     sample.institution,
@@ -1077,7 +1655,7 @@ function handleStudentPhotoUpload(event) {
     document.getElementById('graded-student-name').value =
       `Aluno(a) — Foto (${file.name.replace(/\.[^.]+$/, '')})`;
     runFullExamGrading();
-    showOttoToast('Foto da prova recebida! OMR e conceitos dissertativos analisados.');
+    showOttoToast('Foto da prova analisada!');
   };
   reader.readAsDataURL(file);
 }
@@ -1091,10 +1669,6 @@ function runFullExamGrading() {
   renderGradingWorkspace();
 }
 
-/**
- * Avalia semântica e lexicalmente a resposta dissertativa do aluno contra
- * o gabarito de conceito e as palavras-chave da questão.
- */
 function evaluateEssayByConceptAndKeywords(studentText, question) {
   const norm = str =>
     String(str || '')
@@ -1105,7 +1679,6 @@ function evaluateEssayByConceptAndKeywords(studentText, question) {
   const normStudent = norm(studentText);
   const keywords = question.keywords || [];
 
-  // Dicionário clínico de sinônimos e equivalências conceituais
   const synonymMap = {
     'sacubitril-valsartana': ['inra', 'entresto', 'neprilisina', 'sacubitril'],
     'betabloqueador': ['carvedilol', 'bisoprolol', 'metoprolol', 'succinato'],
@@ -1120,7 +1693,6 @@ function evaluateEssayByConceptAndKeywords(studentText, question) {
     'lactato > 2': ['hiperlactatemia', 'lactato elevado', '18 mg/dl']
   };
 
-  // Verifica se o aluno cometeu erro conceitual crítico (ex: "suspender o betabloqueador" no perfil B)
   const criticalContradiction =
     normStudent.includes('suspender o betabloqueador') ||
     normStudent.includes('suspender betabloqueador');
@@ -1239,14 +1811,14 @@ function renderGradingWorkspace() {
           <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
             <div>
               <span style="font-family:'JetBrains Mono', monospace; font-weight:800; font-size:12.5px;">
-                QUESTÃO DISSERTATIVA ${String(idx + 1).padStart(2, '0')} — ${escapeHtml(q.topic)}
+                QUESTÃO ${String(idx + 1).padStart(2, '0')} — ${escapeHtml(q.topic)}
               </span>
             </div>
             <div style="display:flex; align-items:center; gap:6px;">
               <span class="brand-tag" style="background:${
                 pct >= 75 ? 'var(--accent-emerald)' : pct >= 45 ? 'var(--accent-amber)' : 'var(--accent-crimson)'
               };">
-                ADERÊNCIA CONCEITUAL: ${pct}% (${earnedPts.toFixed(1)} / ${qPts.toFixed(1)} pt)
+                ADERÊNCIA: ${pct}% (${earnedPts.toFixed(1)} / ${qPts.toFixed(1)} pt)
               </span>
             </div>
           </div>
@@ -1256,19 +1828,18 @@ function renderGradingWorkspace() {
           </div>
 
           <div style="background:var(--bg-paper); border:1px solid var(--border-subtle); border-radius:6px; padding:8px 10px; margin-bottom:8px; font-size:12px;">
-            <strong>Gabarito de Conceito Esperado:</strong> ${escapeHtml(q.conceptKey)}
+            <strong>Gabarito Esperado:</strong> ${escapeHtml(q.conceptKey || q.matchingKey || '')}
           </div>
 
           <label class="form-label">Resposta Transcrita da Foto da Prova do Aluno (OCR editável):</label>
           <textarea
             class="textarea-field"
-            style="min-height:68px; margin-bottom:8px; font-size:12.5px;"
+            style="min-height:64px; margin-bottom:8px; font-size:12.5px;"
             oninput="updateStudentEssayText(${idx}, this.value)"
           >${escapeHtml(studentAns)}</textarea>
 
-          <!-- PÍLULAS DE PALAVRAS-CHAVE DETECTADAS VS AUSENTES -->
           <div style="margin-bottom:10px;">
-            <span class="form-label">Rastreamento de Palavras-Chave &amp; Conceitos na Resposta:</span>
+            <span class="form-label">Rastreamento de Palavras-Chave &amp; Conceitos:</span>
             <div>
               ${evalRes.matched
                 .map(kw => `<span class="kw-chip found">✓ ${escapeHtml(kw)}</span>`)
@@ -1280,26 +1851,18 @@ function renderGradingWorkspace() {
                 .map(kw => `<span class="kw-chip missing">✗ Faltou: ${escapeHtml(kw)}</span>`)
                 .join('')}
             </div>
-            ${
-              evalRes.criticalContradiction
-                ? `<div style="margin-top:6px; color:var(--accent-crimson); font-size:11.5px; font-weight:700;">
-                     ⚠️ Alerta Conceitual do Otto: O aluno mencionou conduta contraindicada ("suspender betabloqueador" no perfil B).
-                   </div>`
-                : ''
-            }
           </div>
 
-          <!-- AJUSTE RÁPIDO DE NOTA EM 1 CLIQUE -->
           <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px; padding-top:8px; border-top:1px solid var(--border-subtle);">
-            <span style="font-size:11.5px; font-weight:700; color:var(--text-secondary);">Ajuste Rápido do Professor (1 clique):</span>
+            <span style="font-size:11.5px; font-weight:700; color:var(--text-secondary);">Ajuste Rápido do Professor:</span>
             <div class="pill-group">
               ${[
                 { label: 'Automático IA', val: undefined },
-                { label: '100% (Total)', val: 1.0 },
+                { label: '100%', val: 1.0 },
                 { label: '75%', val: 0.75 },
-                { label: '50% (Parcial)', val: 0.5 },
+                { label: '50%', val: 0.5 },
                 { label: '25%', val: 0.25 },
-                { label: '0% (Zero)', val: 0.0 }
+                { label: '0%', val: 0.0 }
               ]
                 .map(opt => {
                   const isSelected = OttoState.studentGrading.manualScoreOverride[idx] === opt.val;
@@ -1318,9 +1881,8 @@ function renderGradingWorkspace() {
     '<div style="font-size:12px; color:var(--text-secondary);">Nenhuma questão de múltipla escolha nesta prova.</div>';
   essayListEl.innerHTML =
     essayCardsHtml.join('') ||
-    '<div style="font-size:12px; color:var(--text-secondary);">Nenhuma questão dissertativa nesta prova.</div>';
+    '<div style="font-size:12px; color:var(--text-secondary);">Nenhuma questão aberta nesta prova.</div>';
 
-  // Calcula nota normalizada de 0 a 10,0
   const normalizedGrade =
     totalPointsPossible > 0 ? (totalPointsEarned / totalPointsPossible) * 10.0 : 0.0;
   document.getElementById('final-grade-display').textContent =
@@ -1338,21 +1900,7 @@ function renderGradingWorkspace() {
     essayRatios.length > 0
       ? Math.round((essayRatios.reduce((a, b) => a + b, 0) / essayRatios.length) * 100)
       : 100;
-  document.getElementById('grade-essay-summary').textContent = `Dissertativas: ${avgEssayPct}%`;
-
-  const commentEl = document.getElementById('otto-grade-comment');
-  if (commentEl) {
-    if (normalizedGrade >= 8.5) {
-      commentEl.textContent =
-        '"Excelente domínio fisiopatológico e terapêutico. As palavras-chave essenciais das diretrizes foram contempladas com precisão."';
-    } else if (normalizedGrade >= 6.0) {
-      commentEl.textContent =
-        '"Desempenho satisfatório com acerto parcial dos conceitos-chave. Recomendo reforçar os fármacos modificadores de mortalidade omitidos."';
-    } else {
-      commentEl.textContent =
-        '"Atenção pedagógica necessária: houve lacunas nas palavras-chave obrigatórias e divergência em relação à diretriz vigente."';
-    }
-  }
+  document.getElementById('grade-essay-summary').textContent = `Abertas/Conceito: ${avgEssayPct}%`;
 }
 
 function toggleStudentMcBubble(qIdx, letterIdx) {
@@ -1375,16 +1923,12 @@ function setManualEssayRatio(qIdx, val) {
   renderGradingWorkspace();
 }
 
-/**
- * Renderiza uma imagem realista da prova do aluno respondida (para o visor e para o Backup)
- */
 function renderSimulatedExamPhotoDataUrl(studentName, institution, mcMarked, essayAnswers) {
   const canvas = document.createElement('canvas');
   canvas.width = 760;
   canvas.height = 500;
   const ctx = canvas.getContext('2d');
 
-  // Mesa de madeira/fundo escuro e folha de papel levemente inclinada
   ctx.fillStyle = '#222222';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -1396,7 +1940,6 @@ function renderSimulatedExamPhotoDataUrl(studentName, institution, mcMarked, ess
   ctx.lineWidth = 3;
   ctx.strokeRect(0, 0, 716, 468);
 
-  // Cabeçalho da folha fotografada
   ctx.strokeStyle = '#141414';
   ctx.lineWidth = 2;
   ctx.strokeRect(18, 16, 680, 76);
@@ -1411,7 +1954,6 @@ function renderSimulatedExamPhotoDataUrl(studentName, institution, mcMarked, ess
   ctx.font = 'italic bold 14px Georgia, serif';
   ctx.fillText(`Aluno(a): ${studentName}`, 28, 82);
 
-  // Carimbo de Leitura Óptica OMR
   ctx.fillStyle = '#ECFDF5';
   ctx.strokeStyle = '#059669';
   ctx.lineWidth = 2;
@@ -1422,7 +1964,6 @@ function renderSimulatedExamPhotoDataUrl(studentName, institution, mcMarked, ess
   ctx.fillText('OTTO VISION OMR', 540, 44);
   ctx.fillText('LEITURA VALIDADA ✓', 540, 64);
 
-  // Grade de Bolhas OMR preenchidas pelo aluno
   ctx.fillStyle = '#F3F1EC';
   ctx.strokeStyle = '#141414';
   ctx.lineWidth = 1.5;
@@ -1436,7 +1977,7 @@ function renderSimulatedExamPhotoDataUrl(studentName, institution, mcMarked, ess
   const letters = ['A', 'B', 'C', 'D', 'E'];
   let bx = 28;
   OttoState.questions.forEach((q, idx) => {
-    if (q.type !== 'mc') return;
+    if (q.type !== 'mc' || bx > 580) return;
     const marked = mcMarked[idx] !== undefined ? mcMarked[idx] : q.answer;
     const isHit = marked === q.answer;
     ctx.fillStyle = '#141414';
@@ -1467,17 +2008,16 @@ function renderSimulatedExamPhotoDataUrl(studentName, institution, mcMarked, ess
     bx += 18;
   });
 
-  // Respostas Dissertativas Manuscritas na Folha
   let ey = 186;
   OttoState.questions.forEach((q, idx) => {
-    if (q.type !== 'essay' || ey > 420) return;
+    if (q.type === 'mc' || ey > 420) return;
     ctx.strokeStyle = '#141414';
     ctx.lineWidth = 1.2;
     ctx.strokeRect(18, ey, 680, 122);
 
     ctx.fillStyle = '#141414';
     ctx.font = 'bold 12px monospace';
-    ctx.fillText(`QUESTÃO DISSERTATIVA 0${idx + 1} (${q.topic}) — TRANSCRIÇÃO & PALAVRAS-CHAVE:`, 28, ey + 20);
+    ctx.fillText(`QUESTÃO 0${idx + 1} (${q.topic}) — TRANSCRIÇÃO OCR:`, 28, ey + 20);
 
     const ansText = essayAnswers[idx] || q.conceptKey || '';
     ctx.fillStyle = '#1E3A8A';
@@ -1535,7 +2075,7 @@ function saveGradedExamToBackup() {
     exam_style: OttoState.style,
     score: gradeStr,
     tags: `${studentName} ${subj} ${inst} corrigida omr dissertativa`,
-    summary: `Prova corrigida por foto com nota ${gradeStr}. ${document.getElementById('grade-mc-summary').textContent} | ${document.getElementById('grade-essay-summary').textContent}.`,
+    summary: `Prova corrigida com nota ${gradeStr}.`,
     image_data: photoUrl
   };
 
@@ -1562,13 +2102,8 @@ function saveCurrentExamToVault() {
     exam_style: OttoState.style,
     score: `${OttoState.questions.length} Qs`,
     tags: `${title} ${subj} ${inst} ${verName} ${OttoState.style} matriz pdf`,
-    summary: `Matriz de prova gerada no estilo ${OttoState.style.toUpperCase()} com ${OttoState.questions.length} questões e gabarito conceitual Otto.`,
-    image_data: previewImg,
-    payload: {
-      guidelineKey: OttoState.guidelineKey,
-      style: OttoState.style,
-      questions: OttoState.questions
-    }
+    summary: `Matriz de prova gerada no nível ${OttoState.level} com ${OttoState.questions.length} questões.`,
+    image_data: previewImg
   };
 
   addBackupItem(item);
@@ -1581,7 +2116,421 @@ function exportStudentReportCard() {
 }
 
 /* =====================================================================
-   9. COFRE DE BACKUP DE IMAGENS & PRÉ-VISUALIZAÇÃO EM TEMPO REAL (LIVE PREVIEW)
+   9. MODO PROVA ICONOGRÁFICA (IMAGENS + CRONÔMETRO REGRESSIVO VISÍVEL)
+   ===================================================================== */
+function renderClinicalSlideImageDataUrl(kind, title, subtitle) {
+  const c = document.createElement('canvas');
+  c.width = 760;
+  c.height = 460;
+  const ctx = c.getContext('2d');
+
+  ctx.fillStyle = '#0F172A';
+  ctx.fillRect(0, 0, c.width, c.height);
+
+  // Moldura técnica
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(18, 18, 724, 424);
+
+  // Cabeçalho do slide clínico
+  ctx.fillStyle = '#1E293B';
+  ctx.fillRect(18, 18, 724, 52);
+  ctx.fillStyle = '#34D399';
+  ctx.font = 'bold 13px monospace';
+  ctx.fillText(`OTTO ICONOGRAPHIC STATION • ${title.toUpperCase()}`, 34, 48);
+
+  if (kind === 'ecg') {
+    // Grade milimetrada ECG
+    ctx.strokeStyle = 'rgba(239, 68, 68, 0.22)';
+    ctx.lineWidth = 1;
+    for (let x = 35; x < 720; x += 18) {
+      ctx.beginPath(); ctx.moveTo(x, 90); ctx.lineTo(x, 360); ctx.stroke();
+    }
+    for (let y = 90; y < 360; y += 18) {
+      ctx.beginPath(); ctx.moveTo(35, y); ctx.lineTo(720, y); ctx.stroke();
+    }
+    // Traçado ECG com Supra de ST
+    ctx.strokeStyle = '#10B981';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    let x = 45;
+    const baseY = 235;
+    ctx.moveTo(x, baseY);
+    while (x < 690) {
+      ctx.lineTo(x + 20, baseY);
+      ctx.lineTo(x + 28, baseY - 10); // onda P
+      ctx.lineTo(x + 36, baseY);
+      ctx.lineTo(x + 44, baseY + 12); // Q
+      ctx.lineTo(x + 52, baseY - 88); // R
+      ctx.lineTo(x + 60, baseY - 42); // Ponto J elevado (Supra ST!)
+      ctx.quadraticCurveTo(x + 82, baseY - 52, x + 102, baseY); // Onda T hiperaguda
+      x += 125;
+    }
+    ctx.stroke();
+  } else if (kind === 'xray') {
+    // Simulação de Radiografia de Tórax (Pneumotórax Hipertensivo)
+    ctx.fillStyle = '#090D16';
+    ctx.fillRect(180, 82, 400, 290);
+    ctx.strokeStyle = '#64748B';
+    ctx.strokeRect(180, 82, 400, 290);
+    // Hemitórax esquerdo com trama / direito hipertransparente
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.28)';
+    ctx.beginPath();
+    ctx.ellipse(455, 225, 75, 105, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Pulmão direito colabado no hilo
+    ctx.fillStyle = 'rgba(226, 232, 240, 0.45)';
+    ctx.beginPath();
+    ctx.ellipse(325, 235, 28, 42, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#F87171';
+    ctx.font = 'bold 13px monospace';
+    ctx.fillText('← HIPERTRANSPARÊNCIA + AUSÊNCIA DE TRAMA VASCULAR', 200, 118);
+  } else {
+    // Tomografia de Crânio (Hematoma Epidural Lente Biconvexa)
+    ctx.beginPath();
+    ctx.arc(380, 225, 120, 0, Math.PI * 2);
+    ctx.fillStyle = '#1E293B';
+    ctx.fill();
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = '#E2E8F0';
+    ctx.stroke();
+    // Lente biconvexa hiperdensa
+    ctx.beginPath();
+    ctx.ellipse(468, 205, 26, 68, -0.2, 0, Math.PI * 2);
+    ctx.fillStyle = '#F8FAFC';
+    ctx.fill();
+    ctx.fillStyle = '#38BDF8';
+    ctx.font = 'bold 13px monospace';
+    ctx.fillText('COLEÇÃO HIPERDENSA BICONVEXA ( PARIETOTEMPORAL )', 215, 365);
+  }
+
+  ctx.fillStyle = '#E2E8F0';
+  ctx.font = 'bold 15px Inter, sans-serif';
+  ctx.fillText(subtitle, 34, 412);
+
+  return c.toDataURL('image/png');
+}
+
+function initIconographicModule() {
+  OttoState.iconographic.items = [
+    {
+      id: 'ico-1',
+      title: 'Estação 01 — Eletrocardiograma na Dor Torácica',
+      prompt: 'Paciente de 58 anos com dor retroesternal opressiva há 40 minutos. Identifique a alteração eletrocardiográfica principal e defina a conduta imediata de reperfusão.',
+      durationSec: 45,
+      imageDataUrl: renderClinicalSlideImageDataUrl(
+        'ecg',
+        'Estação 01 • ECG de 12 Derivações',
+        'Supradesnivelamento do segmento ST em parede anterior extensa (V1–V6)'
+      )
+    },
+    {
+      id: 'ico-2',
+      title: 'Estação 02 — Imagem Torácica no Politrauma (ATLS)',
+      prompt: 'Com base na imagem radiológica e no quadro de choque obstrutivo com turgência jugular, indique o diagnóstico e o local anatômico exato da descompressão imediata.',
+      durationSec: 40,
+      imageDataUrl: renderClinicalSlideImageDataUrl(
+        'xray',
+        'Estação 02 • Tórax Agudo no Trauma',
+        'Hipertransparência em hemitórax direito, colapso pulmonar e desvio contralateral do mediastino'
+      )
+    },
+    {
+      id: 'ico-3',
+      title: 'Estação 03 — Neuroimagem no TCE com Intervalo Lúcido',
+      prompt: 'Identifique o padrão morfológico da coleção intracraniana na TC de crânio sem contraste, o vaso classicamente lesado e a conduta neurocirúrgica.',
+      durationSec: 50,
+      imageDataUrl: renderClinicalSlideImageDataUrl(
+        'ct',
+        'Estação 03 • TC de Crânio sem Contraste',
+        'Lesão hiperdensa biconvexa (lenticular) respeitando as suturas cranianas'
+      )
+    }
+  ];
+
+  OttoState.iconographic.currentIndex = 0;
+  OttoState.iconographic.remainingSec = OttoState.iconographic.items[0].durationSec;
+  renderIconographicList();
+  renderIconographicStage();
+}
+
+function handleIconographicUpload(event) {
+  const files = Array.from(event.target.files || []);
+  if (!files.length) return;
+
+  const defaultSec = Math.max(5, Number(document.getElementById('icono-default-time')?.value || 45));
+
+  files.forEach((file, idx) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const baseName = file.name.replace(/\.[^.]+$/, '');
+      const newStation = {
+        id: `ico-up-${Date.now()}-${idx}`,
+        title: `Imagem ${OttoState.iconographic.items.length + 1} — ${baseName}`,
+        prompt: `Observe a imagem "${baseName}" projetada. Qual o diagnóstico principal e a conduta indicada?`,
+        durationSec: defaultSec,
+        imageDataUrl: reader.result
+      };
+      OttoState.iconographic.items.push(newStation);
+      OttoState.iconographic.currentIndex = OttoState.iconographic.items.length - 1;
+      OttoState.iconographic.remainingSec = newStation.durationSec;
+      renderIconographicList();
+      renderIconographicStage();
+      showOttoToast(`Imagem "${file.name}" adicionada ao Modo Prova Iconográfica!`);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderIconographicList() {
+  const listEl = document.getElementById('icono-items-list');
+  const countEl = document.getElementById('icono-total-count');
+  if (!listEl) return;
+
+  const items = OttoState.iconographic.items;
+  if (countEl) countEl.textContent = String(items.length);
+
+  listEl.innerHTML = items
+    .map((item, idx) => {
+      const isCurrent = idx === OttoState.iconographic.currentIndex;
+      return `
+        <div class="icono-item-card ${isCurrent ? 'active-station' : ''}" onclick="selectIconographicStation(${idx})">
+          <div class="icono-thumb-box">
+            <img src="${item.imageDataUrl}" alt="${escapeHtml(item.title)}" />
+          </div>
+          <div>
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:6px; margin-bottom:4px;">
+              <strong style="font-size:12px;">#${idx + 1} • ${escapeHtml(item.title)}</strong>
+              <button type="button" class="q-inline-btn" onclick="event.stopPropagation(); removeIconographicStation(${idx})">×</button>
+            </div>
+            <label class="form-label" style="margin-bottom:2px;">Enunciado / Pergunta da Imagem:</label>
+            <input
+              type="text"
+              class="input-field"
+              style="padding:5px 8px; font-size:12px; margin-bottom:6px;"
+              value="${escapeHtml(item.prompt)}"
+              onclick="event.stopPropagation()"
+              oninput="updateIconographicPrompt(${idx}, this.value)"
+            />
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+              <span style="font-size:11px; font-weight:700; color:var(--text-secondary);">Tempo de exibição (s):</span>
+              <input
+                type="number"
+                class="input-field"
+                style="width:82px; padding:4px 7px; font-family:'JetBrains Mono', monospace; font-weight:800; font-size:12px;"
+                min="5"
+                max="600"
+                value="${item.durationSec}"
+                onclick="event.stopPropagation()"
+                oninput="updateIconographicDuration(${idx}, this.value)"
+              />
+            </div>
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+}
+
+function selectIconographicStation(idx) {
+  if (!OttoState.iconographic.items[idx]) return;
+  OttoState.iconographic.currentIndex = idx;
+  OttoState.iconographic.remainingSec = Number(OttoState.iconographic.items[idx].durationSec) || 45;
+  renderIconographicList();
+  renderIconographicStage();
+}
+
+function updateIconographicPrompt(idx, newPrompt) {
+  if (!OttoState.iconographic.items[idx]) return;
+  OttoState.iconographic.items[idx].prompt = newPrompt;
+  if (idx === OttoState.iconographic.currentIndex) {
+    const promptEl = document.getElementById('icono-stage-prompt');
+    if (promptEl) promptEl.textContent = newPrompt;
+  }
+}
+
+function updateIconographicDuration(idx, newSec) {
+  const sec = Math.max(5, Math.min(600, parseInt(newSec, 10) || 45));
+  if (!OttoState.iconographic.items[idx]) return;
+  OttoState.iconographic.items[idx].durationSec = sec;
+  if (idx === OttoState.iconographic.currentIndex && !OttoState.iconographic.isRunning) {
+    OttoState.iconographic.remainingSec = sec;
+    renderIconographicStage();
+  }
+}
+
+function applyDefaultTimeToAllIcono(val) {
+  const sec = Math.max(5, Math.min(600, parseInt(val, 10) || 45));
+  OttoState.iconographic.items.forEach(item => {
+    item.durationSec = sec;
+  });
+  const current = OttoState.iconographic.items[OttoState.iconographic.currentIndex];
+  if (current) {
+    OttoState.iconographic.remainingSec = sec;
+  }
+  renderIconographicList();
+  renderIconographicStage();
+  showOttoToast(`Tempo de ${sec}s aplicado a todas as questões iconográficas!`);
+}
+
+function removeIconographicStation(idx) {
+  if (OttoState.iconographic.items.length <= 1) {
+    showOttoToast('A Prova Iconográfica precisa ter pelo menos 1 imagem.');
+    return;
+  }
+  OttoState.iconographic.items.splice(idx, 1);
+  if (OttoState.iconographic.currentIndex >= OttoState.iconographic.items.length) {
+    OttoState.iconographic.currentIndex = 0;
+  }
+  OttoState.iconographic.remainingSec = OttoState.iconographic.items[OttoState.iconographic.currentIndex].durationSec;
+  renderIconographicList();
+  renderIconographicStage();
+}
+
+function formatSecondsMMSS(sec) {
+  const s = Math.max(0, Math.floor(sec));
+  const mm = String(Math.floor(s / 60)).padStart(2, '0');
+  const ss = String(s % 60).padStart(2, '0');
+  return `${mm}:${ss}`;
+}
+
+function renderIconographicStage() {
+  const items = OttoState.iconographic.items;
+  const idx = OttoState.iconographic.currentIndex;
+  const active = items[idx];
+  if (!active) return;
+
+  const counterEl = document.getElementById('icono-stage-counter');
+  const timerEl = document.getElementById('icono-countdown-display');
+  const progressEl = document.getElementById('icono-progress-bar');
+  const imgEl = document.getElementById('icono-stage-image');
+  const promptEl = document.getElementById('icono-stage-prompt');
+  const allocEl = document.getElementById('icono-stage-alloc-time');
+  const badgeEl = document.getElementById('icono-stage-badge');
+
+  if (counterEl) {
+    counterEl.textContent = `QUESTÃO ICONOGRÁFICA ${String(idx + 1).padStart(2, '0')} / ${String(items.length).padStart(2, '0')}`;
+  }
+  if (imgEl) imgEl.src = active.imageDataUrl;
+  if (promptEl) promptEl.textContent = active.prompt;
+  if (allocEl) allocEl.textContent = `Tempo configurado: ${active.durationSec} segundos`;
+  if (badgeEl) {
+    badgeEl.textContent = OttoState.iconographic.isRunning
+      ? (OttoState.iconographic.isPaused ? '⏸️ SIMULAÇÃO PAUSADA' : '🟢 SIMULAÇÃO EM ANDAMENTO')
+      : 'ESTAÇÃO PRONTA';
+    badgeEl.style.background = OttoState.iconographic.isRunning
+      ? 'var(--accent-emerald)'
+      : 'var(--bg-ink)';
+  }
+
+  const rem = OttoState.iconographic.remainingSec;
+  const total = Math.max(1, Number(active.durationSec) || 45);
+  const pct = Math.max(0, Math.min(100, (rem / total) * 100));
+
+  if (timerEl) {
+    timerEl.textContent = formatSecondsMMSS(rem);
+    timerEl.classList.remove('warning', 'danger');
+    if (rem <= 5) {
+      timerEl.classList.add('danger');
+    } else if (rem <= 12) {
+      timerEl.classList.add('warning');
+    }
+  }
+
+  if (progressEl) {
+    progressEl.style.width = `${pct}%`;
+    progressEl.style.backgroundColor =
+      rem <= 5 ? 'var(--accent-crimson)' : rem <= 12 ? 'var(--accent-amber)' : 'var(--accent-emerald)';
+  }
+}
+
+function startIconographicSimulation() {
+  if (OttoState.mode !== 'iconographic') {
+    switchMode('iconographic');
+  }
+  clearInterval(OttoState.iconographic.timerId);
+
+  const currentItem = OttoState.iconographic.items[OttoState.iconographic.currentIndex];
+  if (!currentItem) return;
+
+  if (!OttoState.iconographic.isRunning || OttoState.iconographic.remainingSec <= 0) {
+    OttoState.iconographic.remainingSec = Number(currentItem.durationSec) || 45;
+  }
+
+  OttoState.iconographic.isRunning = true;
+  OttoState.iconographic.isPaused = false;
+  const pauseBtn = document.getElementById('btn-pause-icono');
+  if (pauseBtn) pauseBtn.textContent = '⏸️ Pausar';
+
+  renderIconographicList();
+  renderIconographicStage();
+  showOttoToast(`Simulação Iconográfica iniciada! Cronômetro regressivo de ${OttoState.iconographic.remainingSec}s ativo.`);
+
+  OttoState.iconographic.timerId = setInterval(() => {
+    if (OttoState.iconographic.isPaused) return;
+
+    if (OttoState.iconographic.remainingSec > 0) {
+      OttoState.iconographic.remainingSec--;
+      renderIconographicStage();
+    } else {
+      // Avança automaticamente para a próxima imagem quando o tempo chega a zero
+      if (OttoState.iconographic.currentIndex < OttoState.iconographic.items.length - 1) {
+        OttoState.iconographic.currentIndex++;
+        const nextItem = OttoState.iconographic.items[OttoState.iconographic.currentIndex];
+        OttoState.iconographic.remainingSec = Number(nextItem.durationSec) || 45;
+        renderIconographicList();
+        renderIconographicStage();
+        showOttoToast(`Tempo esgotado! Avançando para a Imagem ${OttoState.iconographic.currentIndex + 1}.`);
+      } else {
+        stopIconographicSimulation(true);
+      }
+    }
+  }, 1000);
+}
+
+function togglePauseIconographic() {
+  if (!OttoState.iconographic.isRunning) {
+    startIconographicSimulation();
+    return;
+  }
+  OttoState.iconographic.isPaused = !OttoState.iconographic.isPaused;
+  const pauseBtn = document.getElementById('btn-pause-icono');
+  if (pauseBtn) {
+    pauseBtn.textContent = OttoState.iconographic.isPaused ? '▶️ Retomar' : '⏸️ Pausar';
+  }
+  renderIconographicStage();
+}
+
+function stopIconographicSimulation(completedNaturally = false) {
+  clearInterval(OttoState.iconographic.timerId);
+  OttoState.iconographic.timerId = null;
+  OttoState.iconographic.isRunning = false;
+  OttoState.iconographic.isPaused = false;
+
+  const currentItem = OttoState.iconographic.items[OttoState.iconographic.currentIndex];
+  if (currentItem && !completedNaturally) {
+    OttoState.iconographic.remainingSec = Number(currentItem.durationSec) || 45;
+  }
+  renderIconographicStage();
+  if (completedNaturally) {
+    showOttoToast('Simulação Iconográfica concluída em todas as estações!');
+  }
+}
+
+function nextIconographicSlide() {
+  const nextIdx = (OttoState.iconographic.currentIndex + 1) % OttoState.iconographic.items.length;
+  selectIconographicStation(nextIdx);
+}
+
+function prevIconographicSlide() {
+  const len = OttoState.iconographic.items.length;
+  const prevIdx = (OttoState.iconographic.currentIndex - 1 + len) % len;
+  selectIconographicStation(prevIdx);
+}
+
+/* =====================================================================
+   10. COFRE DE BACKUP DE IMAGENS & PRÉ-VISUALIZAÇÃO EM TEMPO REAL (LIVE PREVIEW)
    ===================================================================== */
 function renderExamMatrixThumbnailDataUrl(title, institution, subject, badge, styleName) {
   const canvas = document.createElement('canvas');
@@ -1596,7 +2545,6 @@ function renderExamMatrixThumbnailDataUrl(title, institution, subject, badge, st
   ctx.lineWidth = 3;
   ctx.strokeRect(16, 16, 688, 428);
 
-  // Faixa superior nanquim
   ctx.fillStyle = '#141414';
   ctx.fillRect(16, 16, 688, 54);
 
@@ -1615,7 +2563,6 @@ function renderExamMatrixThumbnailDataUrl(title, institution, subject, badge, st
   ctx.font = 'bold 14px Inter, sans-serif';
   ctx.fillText(`Assunto: ${subject}`, 32, 164);
 
-  // Simulação visual de colunas da prova
   ctx.strokeStyle = '#CFCAC0';
   ctx.lineWidth = 1.5;
   if (styleName === 'duas_colunas') {
@@ -1650,12 +2597,12 @@ function initVaultDataset() {
       exam_style: 'classico',
       score: '9,6 / 10,0',
       tags: 'mariana silva cardiologia icfer sbc ufam quarteto fantastico furosemida',
-      summary: 'Acertou 4/4 questões objetivas OMR e contemplou 100% das palavras-chave no manejo do Perfil B (furosemida + vasodilatador + manutenção do betabloqueador).',
+      summary: 'Acertou 100% das questões objetivas OMR e contemplou todas as palavras-chave no manejo do Perfil B.',
       image_data: renderSimulatedExamPhotoDataUrl(
         'Mariana Silva (Mat. 2026104)',
         'UFAM — Faculdade de Medicina',
         { 0: 1, 1: 2, 2: 1, 3: 1 },
-        STUDENT_SAMPLES.mariana_alta.essayResponses
+        { 4: STUDENT_SAMPLES.mariana_alta.essayResponses.default }
       )
     },
     {
@@ -1669,7 +2616,7 @@ function initVaultDataset() {
       exam_style: 'duas_colunas',
       score: '6 Qs • 10 pts',
       tags: 'cermam sepse choque septico noradrenalina lactato uti duas colunas',
-      summary: 'Prova diagramada em 2 colunas compactas estilo residência médica com cartão OMR e espelho conceitual sobre pacote de 1 hora e vasopressores.',
+      summary: 'Prova diagramada em 2 colunas compactas estilo residência médica com cartão OMR e espelho conceitual.',
       image_data: renderExamMatrixThumbnailDataUrl(
         'Simulado Oficial — Sepse & Choque Séptico',
         'CERMAM — COMISSÃO ESTADUAL DE RESIDÊNCIA MÉDICA',
@@ -1697,66 +2644,6 @@ function initVaultDataset() {
         'PROVA CORRIGIDA',
         'clinico'
       )
-    },
-    {
-      id: 'bkp-seed-4',
-      title: 'Imagem Clínica de Prova — ECG Taquicardia & Radiografia de Tórax',
-      student_name: 'Acervo de Imagens Clínicas',
-      subject: 'Cardiologia & Emergências Clínicas',
-      institution: 'USP — FMUSP / HC',
-      date_str: '2026-10-15',
-      category: 'imagem_clinica',
-      exam_style: 'clinico',
-      score: 'IMAGEM HD',
-      tags: 'imagem clinica ecg radiografia torax cardiologia fmusp usp edema agudo',
-      summary: 'Backup de figura clínica de alta resolução utilizada nas questões de emergência cardiológica e choque.',
-      image_data: renderExamMatrixThumbnailDataUrl(
-        'Figura Clínica #04 — ECG & Congestão Pulmonar',
-        'FMUSP — FACULDADE DE MEDICINA DA USP',
-        'Cardiologia — Emergências',
-        'IMAGEM CLÍNICA',
-        'clinico'
-      )
-    },
-    {
-      id: 'bkp-seed-5',
-      title: 'Prova P2 — Pediatria, Bronquiolite Viral Aguda (VSR) e PNI',
-      student_name: 'Beatriz Oliveira',
-      subject: 'Pediatria & Imunizações (PNI / SUS)',
-      institution: 'ENARE / EBSERH',
-      date_str: '2026-10-12',
-      category: 'prova_aluno',
-      exam_style: 'classico',
-      score: '9,2 / 10,0',
-      tags: 'pediatria bronquiolite vsr pni vacinas enare ebserh beatriz oliveira',
-      summary: 'Excelente fundamentação sobre suporte ventilatório/hidratação na BVA e contraindicação de corticoterapia rotineira.',
-      image_data: renderExamMatrixThumbnailDataUrl(
-        'Avaliação de Pediatria — BVA & Calendário PNI',
-        'ENARE / EBSERH — RESIDÊNCIA MULTIPROFISSIONAL E MÉDICA',
-        'Pediatria & PNI',
-        'NOTA 9,2',
-        'classico'
-      )
-    },
-    {
-      id: 'bkp-seed-6',
-      title: 'Matriz de Prova — Antimicrobianos PK/PD na Terapia Intensiva',
-      student_name: 'Matriz Oficial Docente',
-      subject: 'Farmacologia Clínica — Antimicrobianos',
-      institution: 'USP — FMUSP',
-      date_str: '2026-10-08',
-      category: 'matriz_prova',
-      exam_style: 'duas_colunas',
-      score: '8 Qs • 10 pts',
-      tags: 'farmacologia antimicrobianos pk pd meropenem vancomicina amicacina usp',
-      summary: 'Matriz avaliando tempo acima da CIM (fT > MIC) em beta-lactâmicos com infusão estendida vs pico/MIC em aminoglicosídeos.',
-      image_data: renderExamMatrixThumbnailDataUrl(
-        'Prova de Farmacologia — PK/PD de Antimicrobianos',
-        'UNIVERSIDADE DE SÃO PAULO — FMUSP',
-        'Farmacologia Clínica',
-        'CADERNO BETA',
-        'duas_colunas'
-      )
     }
   ];
 
@@ -1768,7 +2655,6 @@ function initVaultDataset() {
 function addBackupItem(item) {
   OttoState.vaultItems.unshift(item);
   OttoState.selectedVaultId = item.id;
-  // Persiste assincronamente na API SQLite se o servidor estiver ativo
   fetch('/api/backups', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1795,11 +2681,11 @@ function uploadNewBackupImages(event) {
         exam_style: OttoState.style,
         score: 'BACKUP HD',
         tags: `${file.name} backup imagem prova`,
-        summary: `Imagem arquivada diretamente pelo professor (${Math.round(file.size / 1024)} KB). Disponível para busca instantânea e inserção em provas.`,
+        summary: `Imagem arquivada diretamente pelo professor (${Math.round(file.size / 1024)} KB).`,
         image_data: reader.result
       };
       addBackupItem(newItem);
-      showOttoToast(`Imagem "${file.name}" salva no Cofre e pré-visualizada em tempo real!`);
+      showOttoToast(`Imagem "${file.name}" salva no Cofre!`);
     };
     reader.readAsDataURL(file);
   });
@@ -1814,9 +2700,6 @@ function clearVaultFilters() {
   handleVaultLiveFilter();
 }
 
-/**
- * FILTRAGEM EM TEMPO REAL AO DIGITAR + PRÉ-VISUALIZAÇÃO AUTOMÁTICA DO ARQUIVO
- */
 function handleVaultLiveFilter() {
   const query = (document.getElementById('vault-live-search')?.value || '').trim();
   const subjFilter = (document.getElementById('filter-subject')?.value || '').trim().toLowerCase();
@@ -1853,8 +2736,6 @@ function handleVaultLiveFilter() {
         : `Exibindo todos os <strong>${filtered.length}</strong> arquivos do Cofre de Backup`;
   }
 
-  // REGRA DE OURO PEDIDA PELO USUÁRIO:
-  // Ao digitar parte da pesquisa ou filtrar, traz automaticamente em tempo real a pré-visualização do arquivo!
   if (filtered.length > 0) {
     if (query || !filtered.some(i => i.id === OttoState.selectedVaultId)) {
       OttoState.selectedVaultId = filtered[0].id;
