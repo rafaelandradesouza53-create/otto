@@ -63,10 +63,10 @@ def generate_pdf_bytes(payload: dict) -> bytes:
     margin = 38.0
 
     meta = payload.get("meta", {})
-    institution = meta.get("institution", "UNIVERSIDADE FEDERAL / HOSPITAL ESCOLA")
-    title = meta.get("title", "Avaliação Oficial — Clínica Médica & Diretrizes")
-    subject = meta.get("subject", "Clínica Médica / Cardiologia e Terapia Intensiva")
-    professor = meta.get("professor", "Prof. Dr. Titular")
+    institution = meta.get("institution", "INSTITUIÇÃO DE ENSINO")
+    title = meta.get("title", "Avaliação")
+    subject = meta.get("subject", "Geral")
+    professor = meta.get("professor", "")
     date_str = meta.get("date", datetime.date.today().strftime("%d/%m/%Y"))
     version = meta.get("version", "CADERNO ALFA")
     style = meta.get("style", "classico")  # classico | duas_colunas | clinico
@@ -289,7 +289,14 @@ def generate_pdf_bytes(payload: dict) -> bytes:
                 width=0.6,
             )
 
-        q_label = "MÚLTIPLA ESCOLHA" if qtype == "mc" else "DISSERTATIVA CONCEITUAL"
+        q_label_map = {
+            "mc": "MÚLTIPLA ESCOLHA",
+            "essay": "DISSERTATIVA",
+            "vf": "VERDADEIRO OU FALSO",
+            "cloze": "COMPLETE AS LACUNAS",
+            "matching": "ASSOCIAR COLUNAS",
+        }
+        q_label = q_label_map.get(qtype, "QUESTÃO")
         page.insert_text(
             fitz.Point(x0 + 4, y + 11.5),
             f"QUESTÃO {idx:02d}  •  [{topic.upper()}]  •  {q_label} ({points:.1f} pt)",
@@ -312,10 +319,10 @@ def generate_pdf_bytes(payload: dict) -> bytes:
         y += used_h + 4
 
         if qtype == "mc":
-            letters = ["A", "B", "C", "D", "E"]
-            for o_idx, opt_text in enumerate(options[:5]):
+            letters = ["A", "B", "C", "D", "E", "F"]
+            for o_idx, opt_text in enumerate(options[:6]):
                 letter = letters[o_idx]
-                opt_clean = re.sub(r"^[A-Ea-e][\)\.\-]\s*", "", str(opt_text))
+                opt_clean = re.sub(r"^[A-Fa-f][\)\.\-]\s*", "", str(opt_text))
                 opt_rect = fitz.Rect(x0 + 6, y, x1, y + 42)
                 rc_opt = page.insert_textbox(
                     opt_rect,
@@ -326,19 +333,65 @@ def generate_pdf_bytes(payload: dict) -> bytes:
                 )
                 opt_h = max(13.5, (42.0 - rc_opt) if rc_opt >= 0 else 26.0)
                 y += opt_h + 2
+        elif qtype == "vf":
+            for st in q.get("vfStatements", []):
+                st_text = st.get("text", "")
+                st_rect = fitz.Rect(x0 + 6, y, x1, y + 42)
+                rc_st = page.insert_textbox(
+                    st_rect,
+                    f"(   )  {st_text}",
+                    fontsize=8.6 if not two_col else 8.1,
+                    fontname="helv",
+                    color=(0.12, 0.12, 0.12),
+                )
+                st_h = max(13.5, (42.0 - rc_st) if rc_st >= 0 else 26.0)
+                y += st_h + 2
+        elif qtype == "cloze":
+            if q.get("showWordBank", True):
+                wb = "  •  ".join(q.get("wordBank") or q.get("blanks") or [])
+                if wb:
+                    wb_rect = fitz.Rect(x0 + 4, y, x1, y + 36)
+                    rc_wb = page.insert_textbox(
+                        wb_rect,
+                        f"Banco de Palavras: {wb}",
+                        fontsize=8.2,
+                        fontname="helv",
+                        color=(0.2, 0.2, 0.2),
+                    )
+                    wb_h = max(16.0, (36.0 - rc_wb) if rc_wb >= 0 else 24.0)
+                    y += wb_h + 4
+        elif qtype == "matching":
+            col_a = q.get("colA", [])
+            col_b = q.get("colB", [])
+            rows_cnt = max(len(col_a), len(col_b))
+            for r_i in range(rows_cnt):
+                txt_a = col_a[r_i] if r_i < len(col_a) else ""
+                txt_b = col_b[r_i] if r_i < len(col_b) else ""
+                row_rect = fitz.Rect(x0 + 4, y, x1, y + 32)
+                rc_row = page.insert_textbox(
+                    row_rect,
+                    f"{txt_a}    |    {txt_b}",
+                    fontsize=8.2,
+                    fontname="helv",
+                    color=(0.12, 0.12, 0.12),
+                )
+                row_h = max(14.0, (32.0 - rc_row) if rc_row >= 0 else 22.0)
+                y += row_h + 2
         else:
             # Linhas pautadas para questão dissertativa
-            box_h = 56.0
+            essay_lines = int(q.get("essayLines", 5))
+            box_h = max(28.0, essay_lines * 13.5 + 8.0) if essay_lines > 0 else 65.0
             resp_rect = fitz.Rect(x0, y, x1, y + box_h)
             page.draw_rect(resp_rect, color=(0.55, 0.55, 0.55), width=0.6)
-            for l_i in range(1, 5):
+            for l_i in range(1, essay_lines + 1):
                 ly = y + l_i * 13.5
-                page.draw_line(
-                    fitz.Point(x0 + 6, ly),
-                    fitz.Point(x1 - 6, ly),
-                    color=(0.82, 0.82, 0.82),
-                    width=0.5,
-                )
+                if ly < y + box_h - 2:
+                    page.draw_line(
+                        fitz.Point(x0 + 6, ly),
+                        fitz.Point(x1 - 6, ly),
+                        color=(0.82, 0.82, 0.82),
+                        width=0.5,
+                    )
             y += box_h + 4
 
         y += 10
