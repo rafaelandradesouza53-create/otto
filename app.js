@@ -304,22 +304,41 @@ function updateTotalConfiguredBadge() {
 
 function generateExamFromMaterial() {
   const customText = (document.getElementById('professor-source-text')?.value || '').trim();
-  const totalWanted = getTotalConfiguredQuestions();
+  let totalWanted = getTotalConfiguredQuestions();
 
   if (!customText && OttoState.uploadedSlides.length === 0) {
-    showOttoToast('Insira um texto ou anexe arquivos no bloco "Conteúdo" antes de gerar questões automáticas, ou use o Construtor de Questões Manuais.');
+    showOttoToast('Primeiro cole um texto ou clique em "📎 Anexar arquivos" no bloco Conteúdo.');
     const srcBox = document.getElementById('professor-source-text');
     if (srcBox) srcBox.focus();
     return;
   }
 
   if (totalWanted <= 0) {
-    showOttoToast('Defina a quantidade desejada de questões nos contadores de "Composição das questões" (ex: +1 Múltipla Escolha).');
-    return;
+    OttoState.typeCounts.mc = 4;
+    OttoState.typeCounts.essay = 1;
+    const mcIn = document.getElementById('qty-mc');
+    const esIn = document.getElementById('qty-essay');
+    if (mcIn) mcIn.value = '4';
+    if (esIn) esIn.value = '1';
+    updateTotalConfiguredBadge();
+    totalWanted = 5;
   }
 
   rebuildExamQuestionsFromState();
-  showOttoToast(`${OttoState.questions.length} questão(ões) diagramada(s) na folha A4!`);
+  showOttoToast(`${OttoState.questions.length} questão(ões) pronta(s) na Folha A4!`);
+}
+
+function quickPresetExam(mcCount, essayCount, clozeCount = 0, matchingCount = 0) {
+  OttoState.typeCounts.mc = mcCount;
+  OttoState.typeCounts.essay = essayCount;
+  OttoState.typeCounts.cloze = clozeCount;
+  OttoState.typeCounts.matching = matchingCount;
+  ['mc', 'essay', 'cloze', 'matching'].forEach(k => {
+    const el = document.getElementById(`qty-${k}`);
+    if (el) el.value = String(OttoState.typeCounts[k]);
+  });
+  updateTotalConfiguredBadge();
+  generateExamFromMaterial();
 }
 
 function rebuildExamQuestionsFromState() {
@@ -632,6 +651,10 @@ function setManualBuilderType(typeKey) {
   document.querySelectorAll('#manual-type-pills .pill').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.qtype === typeKey);
   });
+  const formWrap = document.getElementById('mq-form-collapsible');
+  if (formWrap) {
+    formWrap.style.display = 'block';
+  }
   renderManualBuilderTypeFields();
 }
 
@@ -639,8 +662,14 @@ function openManualBuilderAndFocus(typeKey) {
   if (OttoState.mode !== 'generator') {
     switchMode('generator');
   }
+  if (typeof openActionDrawer === 'function') {
+    openActionDrawer('drawer-manual');
+  }
   if (typeKey) {
     setManualBuilderType(typeKey);
+  } else {
+    const formWrap = document.getElementById('mq-form-collapsible');
+    if (formWrap) formWrap.style.display = 'block';
   }
   const card = document.getElementById('manual-question-builder-card');
   if (card) {
@@ -2992,3 +3021,98 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 }
+
+/* =====================================================================
+   8. CONTROLES DE INTERFACE ENXUTA (BOTÕES QUE ABREM OUTROS BOTÕES)
+   ===================================================================== */
+function toggleActionDrawer(drawerId) {
+  const drawers = ['drawer-auto', 'drawer-manual', 'drawer-header'];
+  const targetEl = document.getElementById(drawerId);
+  if (!targetEl) return;
+  const isCurrentlyOpen = targetEl.style.display !== 'none';
+
+  drawers.forEach(id => {
+    const el = document.getElementById(id);
+    const btn = document.getElementById(`btn-${id}`);
+    if (id === drawerId) {
+      el.style.display = isCurrentlyOpen ? 'none' : 'block';
+      if (btn) btn.classList.toggle('active-drawer-btn', !isCurrentlyOpen);
+    } else {
+      if (el) el.style.display = 'none';
+      if (btn) btn.classList.remove('active-drawer-btn');
+    }
+  });
+}
+
+function openActionDrawer(drawerId) {
+  const drawers = ['drawer-auto', 'drawer-manual', 'drawer-header'];
+  drawers.forEach(id => {
+    const el = document.getElementById(id);
+    const btn = document.getElementById(`btn-${id}`);
+    const open = id === drawerId;
+    if (el) el.style.display = open ? 'block' : 'none';
+    if (btn) btn.classList.toggle('active-drawer-btn', open);
+  });
+}
+
+function toggleSubBox(boxId, btnEl) {
+  const box = document.getElementById(boxId);
+  if (!box) return;
+  const willShow = box.style.display === 'none' || !box.style.display;
+  box.style.display = willShow ? 'block' : 'none';
+  if (btnEl) {
+    btnEl.classList.toggle('active', willShow);
+  }
+}
+
+function togglePopMenu(menuId, event) {
+  if (event) event.stopPropagation();
+  const menu = document.getElementById(menuId);
+  if (!menu) return;
+  const isOpen = menu.classList.contains('open');
+  closeAllPopMenus();
+  if (!isOpen) {
+    menu.classList.add('open');
+  }
+}
+
+function closeAllPopMenus() {
+  document.querySelectorAll('.pop-menu-box.open').forEach(el => {
+    el.classList.remove('open');
+  });
+}
+
+document.addEventListener('click', () => {
+  closeAllPopMenus();
+});
+
+function switchGraderViewMode(submode) {
+  const indivPane = document.getElementById('grader-individual-pane');
+  const batchCard = document.getElementById('batch-grading-card');
+  const btnIndiv = document.getElementById('btn-grader-mode-indiv');
+  const btnBatch = document.getElementById('btn-grader-mode-batch');
+
+  const isBatch = submode === 'batch';
+  if (indivPane) indivPane.style.display = isBatch ? 'none' : 'block';
+  if (batchCard) batchCard.style.display = isBatch ? 'block' : 'none';
+  if (btnIndiv) btnIndiv.classList.toggle('active-drawer-btn', !isBatch);
+  if (btnBatch) btnBatch.classList.toggle('active-drawer-btn', isBatch);
+}
+
+function setVaultQuickCat(catValue, btnEl) {
+  const sel = document.getElementById('filter-category');
+  if (sel) sel.value = catValue;
+  document.querySelectorAll('#vault-quick-cat-pills .pill').forEach(b => {
+    b.classList.toggle('active', b === btnEl);
+  });
+  handleVaultLiveFilter();
+}
+
+function syncHeaderFromSheetEditable(fieldId, textValue) {
+  const inputEl = document.getElementById(fieldId);
+  if (inputEl) {
+    inputEl.value = String(textValue || '').trim();
+    syncExamHeader();
+  }
+}
+
